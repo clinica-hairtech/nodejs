@@ -3,10 +3,9 @@ const app = express();
 
 app.use(express.json());
 
-// TOKEN (TEM QUE SER IGUAL AO DA META)
 const VERIFY_TOKEN = "meu_token";
 
-// ROTA PRINCIPAL
+// rota teste
 app.get('/', (req, res) => {
   res.send('Servidor rodando 🚀');
 });
@@ -31,7 +30,7 @@ app.post('/webhook', (req, res) => {
   res.sendStatus(200);
 });
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
