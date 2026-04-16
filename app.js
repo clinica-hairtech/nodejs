@@ -3,25 +3,14 @@ const app = express();
 
 app.use(express.json());
 
-const VERIFY_TOKEN = "meutoken123"; // pode manter esse
+const VERIFY_TOKEN = "meutoken123";
 
-// ROTA PRINCIPAL (só pra teste)
-app.get('/', (req, res) => {
-  res.send('Servidor rodando');
-});
-
-// VERIFICAÇÃO DO WEBHOOK (Meta)
+// VERIFICAÇÃO DA META
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  // acesso direto pelo navegador
-  if (!mode || !token) {
-    return res.send('Webhook ativo');
-  }
-
-  // verificação da Meta
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
     console.log('Webhook verificado!');
     return res.status(200).send(challenge);
@@ -30,9 +19,14 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// RECEBER MENSAGENS (POST)
+// TESTE SIMPLES
+app.get('/', (req, res) => {
+  res.send('Servidor rodando');
+});
+
+// RECEBER MENSAGENS
 app.post('/webhook', (req, res) => {
-  console.log('Mensagem recebida:', JSON.stringify(req.body, null, 2));
+  console.log('Recebido:', req.body);
   res.sendStatus(200);
 });
 
