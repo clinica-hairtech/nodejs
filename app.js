@@ -3,15 +3,26 @@ const app = express();
 
 app.use(express.json());
 
-// TESTE NO NAVEGADOR
+const VERIFY_TOKEN = "meutoken123"; // você escolhe isso
+
+// VERIFICAÇÃO DA META
 app.get('/webhook', (req, res) => {
-  res.send('Webhook ativo');
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('Webhook verificado!');
+    return res.status(200).send(challenge);
+  } else {
+    return res.sendStatus(403);
+  }
 });
 
-// RECEBER POST
+// RECEBER MENSAGENS
 app.post('/webhook', (req, res) => {
   console.log('Recebido:', req.body);
-  res.status(200).send('OK');
+  res.sendStatus(200);
 });
 
 const PORT = process.env.PORT || 3000;
