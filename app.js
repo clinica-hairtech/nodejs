@@ -3,8 +3,8 @@ const app = express();
 
 app.use(express.json());
 
-// TOKEN DE VERIFICAÇÃO (tem que ser igual ao da Meta)
-const VERIFY_TOKEN = "hairtech_token_2026";
+// TOKEN vem do Railway (variável de ambiente)
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 // ROTA DE VERIFICAÇÃO DO WEBHOOK (GET)
 app.get("/webhook", (req, res) => {
@@ -12,10 +12,15 @@ app.get("/webhook", (req, res) => {
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode && token === VERIFY_TOKEN) {
+  console.log("Modo:", mode);
+  console.log("Token recebido:", token);
+  console.log("Token esperado:", VERIFY_TOKEN);
+
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("WEBHOOK VERIFICADO");
     return res.status(200).send(challenge);
   } else {
+    console.log("ERRO NA VERIFICAÇÃO");
     return res.sendStatus(403);
   }
 });
