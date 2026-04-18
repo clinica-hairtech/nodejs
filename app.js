@@ -1,12 +1,17 @@
 const express = require("express");
-const app = express();
+const axios = require("axios");
 
+const app = express();
 app.use(express.json());
 
-// TOKEN vem do Railway (variável de ambiente)
+// Variáveis do Railway
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
-// ROTA DE VERIFICAÇÃO DO WEBHOOK (GET)
+// ===============================
+// VERIFICAÇÃO DO WEBHOOK (GET)
+// ===============================
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -25,15 +30,64 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// ROTA PARA RECEBER MENSAGENS (POST)
+// ===============================
+// FUNÇÃO PARA ENVIAR MENSAGEM
+// ===============================
+async function enviarMensagem(numero, mensagem) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: numero,
+        type: "text",
+        text: { body: mensagem }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log("Mensagem enviada com sucesso");
+  } catch (error) {
+    console.error("Erro ao enviar mensagem:", error.response?.data || error.message);
+  }
+}
+
+// ===============================
+// RECEBER MENSAGENS (POST)
+// ===============================
 app.post("/webhook", (req, res) => {
   console.log("Mensagem recebida:");
   console.log(JSON.stringify(req.body, null, 2));
 
-  return res.sendStatus(200);
+  try {
+    const mensagem =
+      req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+    if (mensagem) {
+      const numero = mensagem.from;
+      const texto = mensagem.text?.body;
+
+      console.log("Número:", numero);
+      console.log("Texto:", texto);
+
+      // RESPOSTA AUTOMÁTICA
+      enviarMensagem(numero, "Olá! Recebemos sua mensagem 👨‍⚕️ Em breve vamos te responder.");
+    }
+  } catch (error) {
+    console.log("Erro ao processar mensagem");
+  }
+
+  res.sendStatus(200);
 });
 
+// ===============================
 // ROTA TESTE
+// ===============================
 app.get("/", (req, res) => {
   res.send("Servidor rodando");
 });
