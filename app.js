@@ -26,3 +26,155 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Servidor rodando na porta " + PORT);
 });
+ // ==========================
+ // VERIFICAÇÃO DO WEBHOOK
+ // ==========================
+ app.get("/webhook", (req, res) => {
+   const mode = req.query["hub.mode"];
+   const token = req.query["hub.verify_token"];
+   const challenge = req.query["hub.challenge"];
+
+   if (mode === "subscribe" && token === VERIFY_TOKEN) {
+     return res.status(200).send(challenge);
+   } else {
+     return res.sendStatus(403);
+   }
+ });
+ // ==========================
+ // RECEBER MENSAGENS
+ // ==========================
+ app.post("/webhook", async (req, res) => {
+   try {
+     const value = req.body.entry?.[0]?.changes?.[0]?.value;
+     const message = value?.messages?.[0];
+
+     if (!message) return res.sendStatus(200);
+
+     const from = message.from;
+
+     const text = message.text?.body
+       ? message.text.body.toLowerCase()
+       : "";
+
+     // cria paciente se não existir
+     if (!pacientes[from]) {
+       pacientes[from] = {
+         etapa: "inicio",
+         nome: null,
+         queixa: null,
+         local: null
+       };
+     }
+
+     // (ainda vamos criar essa função na próxima etapa)
+     const resposta = fluxoAtendimento(from, text);
+
+     await enviarMensagem(from, resposta);
+
+     return res.sendStatus(200);
+
+   } catch (error) {
+     console.error("Erro no webhook:", error);
+     return res.sendStatus(500);
+   }
+ });
+ // ==========================
+ // FLUXO DA SECRETÁRIA
+ // ==========================
+ function fluxoAtendimento(numero, texto) {
+   const paciente = pacientes[numero];
+
+   // ETAPA 1 - INÍCIO
+   if (paciente.etapa === "inicio") {
+     paciente.etapa = "nome";
+     return "Olá! Aqui é da Clínica HairTech.\n\nPara te atender melhor, qual seu nome?";
+   }
+
+   // ETAPA 2 - NOME
+   if (paciente.etapa === "nome") {
+     paciente.nome = texto;
+     paciente.etapa = "queixa";
+     return "Prazer, " + texto + "! Me conta: qual sua principal queixa capilar hoje?";
+   }
+
+   // ETAPA 3 - QUEIXA
+   if (paciente.etapa === "queixa") {
+     paciente.queixa = texto;
+     paciente.etapa = "local";
+
+     if (texto.includes("queda")) {
+       return "Entendi. A queda capilar pode ter várias causas como fatores hormonais, inflamatórios e nutricionais.\n\nIsso tem solução quando investigamos corretamente.\n\nDe qual cidade você fala?";
+     }
+
+     if (texto.includes("transplante")) {
+       return "Perfeito. O transplante capilar é indicado quando não há mais folículos ativos.\n\nMas em muitos casos conseguimos recuperar fios antes disso com tratamento clínico.\n\nDe qual cidade você fala?";
+     }
+
+     if (texto.includes("calvicie") || texto.includes("calvície")) {
+       return "A calvície tem tratamento e controle, principalmente quando diagnosticada precocemente.\n\nQuanto antes tratar, melhor o resultado.\n\nDe qual cidade você fala?";
+     }
+
+     return "Perfeito. Vamos avaliar isso com precisão.\n\nDe qual cidade você fala?";
+   }
+
+   // ETAPA 4 - LOCAL
+   if (paciente.etapa === "local") {
+     paciente.local = texto;
+     paciente.etapa = "fechamento";
+
+     return "Perfeito, " + paciente.nome + ".\n\nAqui na HairTech fazemos uma avaliação completa com tricoscopia para identificar a causa exata e montar um tratamento personalizado.\n\nEssa etapa é essencial para definir o melhor tratamento para você.\n\nQuer que eu te explique como funciona a consulta?";
+   }
+
+   // ETAPA 5 - FECHAMENTO
+   if (paciente.etapa === "fechamento") {
+     paciente.etapa = "agendamento";
+
+     return "Nossa consulta inclui análise completa do couro cabeludo, diagnóstico preciso e definição do melhor tratamento.\n\nPara garantir sua vaga, o agendamento é feito mediante pagamento antecipado.\n\nSe fizer sentido pra você, posso verificar os horários disponíveis e te orientar no agendamento agora.";
+   }
+
+   // ETAPA 6 - AGENDAMENTO
+   if (paciente.etapa === "agendamento") {
+     return "Perfeito! Vamos organizar isso.\n\nMe confirma: qual dia da semana fica melhor pra você e prefere manhã ou tarde?";
+   }
+
+   return "Me conta um pouco mais para eu te ajudar melhor.";
+ }
+ // ==========================
+ // ENVIAR MENSAGEM
+ // ==========================
+ async function enviarMensagem(to, mensagem) {
+   try {
+     await axios.post(
+       `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+       {
+         messaging_product: "whatsapp",
+         to: to,
+         text: { body: mensagem }
+       },
+       {
+         headers: {
+           Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+           "Content-Type": "application/json"
+         }
+       }
+     );
+   } catch (error) {
+     console.error("Erro ao enviar mensagem:", error.response?.data || error.message);
+   }
+ }
+
+ // ==========================
+ // ROTA TESTE
+ // ==========================
+ app.get("/", (req, res) => {
+   res.send("Servidor rodando");
+ });
+
+ // ==========================
+ // START SERVIDOR
+ // ==========================
+ const PORT = process.env.PORT || 3000;
+
+ app.listen(PORT, () => {
+   console.log("Servidor rodando na porta " + PORT);
+ });
