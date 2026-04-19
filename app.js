@@ -5,6 +5,7 @@ const iniciarRetomada = require("./retomada");
 const adminRouter = require("./admin");
 const lembretes = require("./lembretes");
 const db = require("./db");
+const iniciarRelatorio = require("./relatorio");
 
 const app = express();
 app.use(express.json());
@@ -14,7 +15,7 @@ const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const AI_MODEL         = process.env.AI_MODEL || "openai/gpt-4o-mini";
+const AI_MODEL         = process.env.AI_MODEL || "anthropic/claude-opus-4-5";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
@@ -32,6 +33,7 @@ db.init().then(async (ok) => {
   // Inicia sistemas automáticos após carregar conversas
   iniciarRetomada(conversas, enviarMensagem);
   lembretes.iniciar(enviarMensagem);
+  iniciarRelatorio(conversas, enviarMensagem, OWNER_PHONE);
 });
 
 // Sincroniza conversas com banco a cada 2 minutos
@@ -54,17 +56,28 @@ async function processarComando(texto) {
   if (lower === "/ajuda" || lower === "ajuda") {
     return responder(
       "*Comandos disponíveis:*\n\n" +
-      "*/status* — ver resumo das conversas\n" +
+      "*/status* — resumo das conversas ativas\n" +
+      "*/relatorio* — relatorio completo da semana\n" +
       "*/todos [msg]* — enviar para todos os ativos\n" +
       "*/quentes [msg]* — enviar para leads quentes\n" +
       "*/mornos [msg]* — enviar para leads mornos\n" +
-      "*/semresposta [msg]* — enviar para quem não respondeu\n" +
-      "*/inativos [msg]* — enviar para inativos há +48h\n" +
-      "*/msg [número] [texto]* — enviar para um paciente\n" +
-      "*/pausar [número]* — pausar bot para um número\n" +
-      "*/retomar [número]* — retomar bot para um número\n\n" +
-      "Exemplo: /todos Olá! Temos novidade na clínica."
+      "*/semresposta [msg]* — enviar para quem nao respondeu\n" +
+      "*/inativos [msg]* — enviar para inativos ha +48h\n" +
+      "*/msg [numero] [texto]* — enviar para um paciente\n" +
+      "*/pausar [numero]* — pausar bot para um numero\n" +
+      "*/retomar [numero]* — retomar bot para um numero\n\n" +
+      "Exemplo: /quentes Ola! Temos uma condicao especial esta semana."
     );
+  }
+
+  // /relatorio — sob demanda
+  if (lower === "/relatorio" || lower === "relatorio") {
+    try {
+      const rel = await iniciarRelatorio.gerarRelatorio(conversas);
+      return responder(rel);
+    } catch (e) {
+      return responder("Erro ao gerar relatorio: " + e.message);
+    }
   }
 
   // /status
