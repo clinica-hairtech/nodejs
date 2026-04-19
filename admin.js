@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const db = require("./db");
 
 const ADMIN_PASS = process.env.ADMIN_PASS || "hairtech2026";
 
@@ -25,10 +26,11 @@ function autenticar(req, res, next) {
 module.exports = function(conversas, enviarMensagem) {
 
   // ===== PAINEL PRINCIPAL =====
-  router.get("/", autenticar, (req, res) => {
+  router.get("/", autenticar, async (req, res) => {
     const senha = req.query.senha;
     const agora = Date.now();
     const filtroTemp = req.query.temp || "";
+    const metricas = await db.buscarMetricas().catch(() => null);
 
     const total    = Object.keys(conversas).length;
     const ativos   = Object.values(conversas).filter(c => c.status === "ativo").length;
@@ -108,6 +110,19 @@ module.exports = function(conversas, enviarMensagem) {
         <div class="card"><span style="color:#f59e0b">${pausados}</span><small>Pausados</small></div>
         <div class="card"><span style="color:#ef4444">${quentes}</span><small>Leads quentes</small></div>
         <div class="card"><span style="color:#f59e0b">${mornos}</span><small>Leads mornos</small></div>
+
+        ${metricas ? `
+        <div style="margin:20px 0;padding:16px;background:#111;border-radius:10px;border-left:3px solid #7c3aed">
+          <p style="color:#888;font-size:12px;margin:0 0 10px">METRICAS HISTORICAS (banco de dados)</p>
+          <div style="display:flex;gap:20px;flex-wrap:wrap">
+            <span style="font-size:13px">Conversas (7d): <strong style="color:#a78bfa">${metricas.conversas_semana}</strong></span>
+            <span style="font-size:13px">Quentes total: <strong style="color:#ef4444">${metricas.leads_quentes}</strong></span>
+            <span style="font-size:13px">Mornos total: <strong style="color:#f59e0b">${metricas.leads_mornos}</strong></span>
+            <span style="font-size:13px">Convertidos: <strong style="color:#22c55e">${metricas.convertidos}</strong></span>
+            <span style="font-size:13px">Transplante: <strong style="color:#c4b5fd">${metricas.transplantes}</strong></span>
+            <span style="font-size:13px">Retornos: <strong style="color:#6b7280">${metricas.retornos}</strong></span>
+          </div>
+        </div>` : ""}
 
         <div style="margin:16px 0">${filtros}</div>
 

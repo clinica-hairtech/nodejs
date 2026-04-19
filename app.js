@@ -4,6 +4,7 @@ const SYSTEM_PROMPT = require("./systemPrompt");
 const iniciarRetomada = require("./retomada");
 const adminRouter = require("./admin");
 const lembretes = require("./lembretes");
+const db = require("./db");
 
 const app = express();
 app.use(express.json());
@@ -17,13 +18,27 @@ const AI_MODEL         = process.env.AI_MODEL || "openai/gpt-4o-mini";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
 
-// Estado global das conversas
+// Estado global das conversas (carregado do banco na inicialização)
 const conversas = {};
 const idsProcessados = new Set();
 
-// Inicia sistemas automáticos
-iniciarRetomada(conversas, enviarMensagem);
-lembretes.iniciar(enviarMensagem);
+// Inicializa banco e carrega conversas
+db.init().then(async (ok) => {
+  if (ok) {
+    const salvas = await db.carregarConversas();
+    Object.assign(conversas, salvas);
+  }
+  // Inicia sistemas automáticos após carregar conversas
+  iniciarRetomada(conversas, enviarMensagem);
+  lembretes.iniciar(enviarMensagem);
+});
+
+// Sincroniza conversas com banco a cada 2 minutos
+setInterval(() => {
+  for (const numero in conversas) {
+    db.salvarConversa(numero, conversas[numero]).catch(() => {});
+  }
+}, 2 * 60 * 1000);
 
 // ==========================
 // CLASSIFICAÇÃO DE LEAD
@@ -167,6 +182,11 @@ app.post("/webhook", async (req, res) => {
 
     const resposta = await obterRespostaIA(from, userMessage);
     await processarResposta(from, resposta);
+
+    // Persiste no banco de forma assíncrona
+    db.salvarConversa(from, conversas[from]).catch(() => {});
+    db.salvarMensagem(from, "user", userMessage).catch(() => {});
+    db.salvarMensagem(from, "assistant", resposta).catch(() => {});
 
   } catch (error) {
     console.error("Erro no webhook:", error.message);
@@ -594,12 +614,17 @@ function dividirMensagem(texto, maxLen = 3900) {
 // ==========================
 app.get("/", (req, res) => res.json({ status: "online", bot: "Clinica HairTech", versao: "3.0" }));
 
-app.get("/status", (req, res) => res.json({
-  status: "online",
-  conversasAtivas: Object.keys(conversas).length,
-  modelo: AI_MODEL,
-  consultasAgendadas: Object.keys(lembretes.consultas).length
-}));
+app.get("/status", async (req, res) => {
+  const metricas = await db.buscarMetricas().catch(() => null);
+  res.json({
+    status: "online",
+    conversasAtivas: Object.keys(conversas).length,
+    modelo: AI_MODEL,
+    consultasAgendadas: Object.keys(lembretes.consultas).length,
+    banco: !!db.pool,
+    metricas
+  });
+});
 
 // API para registrar consulta agendada (usada pelo especialista após confirmar)
 app.post("/consulta", (req, res) => {
