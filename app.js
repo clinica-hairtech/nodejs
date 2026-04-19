@@ -430,8 +430,8 @@ async function enviarPdfOrientacaoFotos(to) {
 // GUIA DE FOTOS POR GÊNERO
 // ==========================
 const GUIA_FOTOS_URL = {
-  masculino: process.env.GUIA_FOTOS_M || "",
-  feminino:  process.env.GUIA_FOTOS_F || ""
+  masculino: process.env.GUIA_FOTOS_M || "https://drive.google.com/uc?export=download&id=18Hw5UpfApl0CG5mPUdSCtsAoKysEEvBd",
+  feminino:  process.env.GUIA_FOTOS_F || "https://drive.google.com/uc?export=download&id=1yFMQhCURScmw0SjHsASbkzVBSGl6CzLc"
 };
 
 async function enviarGuiaFotos(to, genero) {
