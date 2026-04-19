@@ -230,6 +230,10 @@ async function processarResposta(from, resposta) {
   if (resposta.includes("[NOTIF_TRANSPLANTE]")) {
     await notificarClinica(from, "Paciente com interesse em transplante capilar");
   }
+  if (resposta.includes("[HUMANO]")) {
+    conversas[from].status = "humano";
+    conversas[from].proximaRetomada = null;
+  }
 
   const enviarPdf = resposta.includes("[PDF_FOTOS]");
 
@@ -237,6 +241,7 @@ async function processarResposta(from, resposta) {
     .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
     .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
     .replace(/\[PDF_FOTOS\]/g, "")
+    .replace(/\[HUMANO\]/g, "")
     .trim();
 
   const partes = dividirMensagem(limpa);

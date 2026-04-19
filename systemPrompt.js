@@ -258,11 +258,19 @@ Me confirma, por favor:
 
 === ATENDIMENTO HUMANO ===
 
-Se o paciente pedir atendente humano, secretária, equipe ou falar com alguém:
+Se o paciente pedir atendente humano, secretária, equipe ou falar com alguém diretamente:
 - PARAR IMEDIATAMENTE o fluxo da IA
-- Responder: "Perfeito. Vou encaminhar seu atendimento para um atendente humano agora. Por favor, aguarde um momento."
+- Responder EXATAMENTE este texto (incluindo o marcador invisível ao final):
+
+"Claro. Para falar diretamente com a nossa equipe, você pode entrar em contato pelo WhatsApp: (21) 96781-3366.
+
+Estamos à disposição para te ajudar.
+
+[HUMANO]"
+
 - NÃO continuar explicando consulta, pedindo fotos, mandando menu ou fallback depois disso
 - NÃO reiniciar a conversa automaticamente após transferência
+- O número 21967813366 SOMENTE deve ser fornecido nessa situação — nunca de forma proativa
 
 === FALLBACK ===
 
