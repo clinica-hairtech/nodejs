@@ -1,7 +1,7 @@
 {
-  "name": "nodejs-app",
-  "version": "1.0.0",
-  "description": "WhatsApp Bot",
+  "name": "hairtech-whatsapp-bot",
+  "version": "2.0.0",
+  "description": "Assistente Virtual Clinica HairTech - WhatsApp AI",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
@@ -9,5 +9,8 @@
   "dependencies": {
     "express": "^4.19.2",
     "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

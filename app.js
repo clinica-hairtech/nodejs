@@ -1,5 +1,6 @@
 const express = require("express");
 const axios = require("axios");
+const SYSTEM_PROMPT = require("./systemPrompt");
 
 const app = express();
 app.use(express.json());
@@ -7,8 +8,26 @@ app.use(express.json());
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const AI_MODEL = process.env.AI_MODEL || "openai/gpt-4o-mini";
 
-const pacientes = {};
+// Conversation history per user (in-memory)
+const conversas = {};
+const idsProcessados = new Set();
+
+// Clear processed IDs hourly
+setInterval(() => idsProcessados.clear(), 60 * 60 * 1000);
+
+// Clear inactive conversations after 24h
+setInterval(() => {
+  const limite = Date.now() - 24 * 60 * 60 * 1000;
+  for (const numero in conversas) {
+    if (conversas[numero].ultimaAtividade < limite) {
+      delete conversas[numero];
+    }
+  }
+}, 60 * 60 * 1000);
+
 // ==========================
 // VERIFICAÇÃO DO WEBHOOK
 // ==========================
@@ -18,111 +37,118 @@ app.get("/webhook", (req, res) => {
   const challenge = req.query["hub.challenge"];
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("Webhook verificado com sucesso");
     return res.status(200).send(challenge);
-  } else {
-    return res.sendStatus(403);
   }
+  return res.sendStatus(403);
 });
+
 // ==========================
 // RECEBER MENSAGENS
 // ==========================
 app.post("/webhook", async (req, res) => {
+  res.sendStatus(200); // Responde imediatamente ao WhatsApp
+
   try {
     const value = req.body.entry?.[0]?.changes?.[0]?.value;
     const message = value?.messages?.[0];
 
-    if (!message) return res.sendStatus(200);
+    if (!message) return;
+
+    // Deduplicação
+    const msgId = message.id;
+    if (idsProcessados.has(msgId)) return;
+    idsProcessados.add(msgId);
 
     const from = message.from;
+    let userMessage = "";
 
-    const text = message.text?.body
-      ? message.text.body.toLowerCase()
-      : "";
-
-    // cria paciente se não existir
-    if (!pacientes[from]) {
-      pacientes[from] = {
-        etapa: "inicio",
-        nome: null,
-        queixa: null,
-        local: null
-      };
+    if (message.type === "text") {
+      userMessage = message.text.body;
+    } else if (message.type === "image") {
+      userMessage = "[O paciente enviou uma imagem]";
+    } else if (message.type === "audio" || message.type === "voice") {
+      userMessage = "[O paciente enviou um áudio]";
+    } else if (message.type === "document") {
+      userMessage = "[O paciente enviou um documento]";
+    } else if (message.type === "interactive") {
+      const interactive = message.interactive;
+      if (interactive.type === "button_reply") {
+        userMessage = interactive.button_reply.title;
+      } else if (interactive.type === "list_reply") {
+        userMessage = interactive.list_reply.title;
+      } else {
+        return;
+      }
+    } else {
+      return;
     }
 
-    // ainda vamos criar essa função na próxima etapa
-    const resposta = fluxoAtendimento(from, text);
+    console.log(`[${from}] ${userMessage.substring(0, 120)}`);
 
-    // ainda vamos criar essa função também
-    await enviarMensagem(from, resposta);
+    const resposta = await obterRespostaIA(from, userMessage);
 
-    return res.sendStatus(200);
+    // Divide mensagens longas no limite do WhatsApp
+    const partes = dividirMensagem(resposta);
+    for (const parte of partes) {
+      await enviarMensagem(from, parte);
+      if (partes.length > 1) await new Promise(r => setTimeout(r, 600));
+    }
 
   } catch (error) {
-    console.error("Erro no webhook:", error);
-    return res.sendStatus(500);
+    console.error("Erro no webhook:", error.message);
   }
 });
+
 // ==========================
-// FLUXO DA SECRETÁRIA
+// RESPOSTA DA IA
 // ==========================
-function fluxoAtendimento(numero, texto) {
-  const paciente = pacientes[numero];
-
-  // ETAPA 1 — INÍCIO
-  if (paciente.etapa === "inicio") {
-    paciente.etapa = "nome";
-    return "Olá! Aqui é da Clínica HairTech.\n\nPara te atender melhor, qual seu nome?";
+async function obterRespostaIA(numero, mensagem) {
+  if (!conversas[numero]) {
+    conversas[numero] = { historico: [], ultimaAtividade: Date.now() };
   }
 
-  // ETAPA 2 — NOME
-  if (paciente.etapa === "nome") {
-    paciente.nome = texto;
-    paciente.etapa = "queixa";
-    return "Prazer, " + texto + "! Me conta: qual sua principal queixa capilar hoje?";
+  conversas[numero].ultimaAtividade = Date.now();
+  conversas[numero].historico.push({ role: "user", content: mensagem });
+
+  // Manter últimas 30 mensagens (15 trocas)
+  if (conversas[numero].historico.length > 30) {
+    conversas[numero].historico = conversas[numero].historico.slice(-30);
   }
 
-  // ETAPA 3 — QUEIXA
-  if (paciente.etapa === "queixa") {
-    paciente.queixa = texto;
-    paciente.etapa = "local";
+  try {
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: AI_MODEL,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...conversas[numero].historico
+        ],
+        max_tokens: 1500,
+        temperature: 0.6
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://clinicahairtech.com.br",
+          "X-Title": "Assistente HairTech"
+        },
+        timeout: 30000
+      }
+    );
 
-    if (texto.includes("queda")) {
-      return "Entendi. A queda capilar pode ter várias causas como fatores hormonais, inflamatórios e nutricionais.\n\nIsso tem solução quando investigamos corretamente.\n\nDe qual cidade você fala?";
-    }
+    const aiResponse = response.data.choices[0].message.content;
+    conversas[numero].historico.push({ role: "assistant", content: aiResponse });
+    return aiResponse;
 
-    if (texto.includes("transplante")) {
-      return "Perfeito. O transplante capilar é indicado quando não há mais folículos ativos.\n\nMas em muitos casos conseguimos recuperar fios antes disso com tratamento clínico.\n\nDe qual cidade você fala?";
-    }
-
-    if (texto.includes("calvicie") || texto.includes("calvície")) {
-      return "A calvície tem tratamento e controle, principalmente quando diagnosticada precocemente.\n\nQuanto antes tratar, melhor o resultado.\n\nDe qual cidade você fala?";
-    }
-
-    return "Perfeito. Vamos avaliar isso com precisão.\n\nDe qual cidade você fala?";
+  } catch (error) {
+    console.error("Erro na IA:", error.response?.data || error.message);
+    return "Desculpa, tive uma dificuldade técnica agora. Pode repetir sua mensagem?";
   }
-
-  // ETAPA 4 — LOCAL
-  if (paciente.etapa === "local") {
-    paciente.local = texto;
-    paciente.etapa = "fechamento";
-
-    return "Perfeito, " + paciente.nome + ".\n\nAqui na HairTech fazemos uma avaliação completa com tricoscopia para identificar a causa exata e montar um tratamento personalizado.\n\nEssa etapa é essencial para definir o melhor tratamento para você.\n\nQuer que eu te explique como funciona a consulta?";
-  }
-
-  // ETAPA 5 — FECHAMENTO
-  if (paciente.etapa === "fechamento") {
-    paciente.etapa = "agendamento";
-
-    return "Nossa consulta inclui análise completa do couro cabeludo, diagnóstico preciso e definição do melhor tratamento.\n\nPara garantir sua vaga, o agendamento é feito mediante pagamento antecipado.\n\nSe fizer sentido pra você, posso verificar os horários disponíveis e te orientar no agendamento agora.";
-  }
-
-  // ETAPA 6 — AGENDAMENTO
-  if (paciente.etapa === "agendamento") {
-    return "Perfeito! Vamos organizar isso.\n\nMe confirma: qual dia da semana fica melhor pra você e prefere manhã ou tarde?";
-  }
-
-  return "Me conta um pouco mais para eu te ajudar melhor.";
 }
+
 // ==========================
 // ENVIAR MENSAGEM
 // ==========================
@@ -133,32 +159,63 @@ async function enviarMensagem(to, mensagem) {
       {
         messaging_product: "whatsapp",
         to: to,
-        text: { body: mensagem }
+        type: "text",
+        text: { body: mensagem, preview_url: false }
       },
       {
         headers: {
           Authorization: `Bearer ${WHATSAPP_TOKEN}`,
           "Content-Type": "application/json"
-        }
+        },
+        timeout: 10000
       }
     );
   } catch (error) {
-    console.error("Erro ao enviar mensagem:", error.response?.data || error.message);
+    console.error("Erro ao enviar:", error.response?.data || error.message);
   }
 }
 
+// Divide texto longo em partes menores respeitando parágrafos
+function dividirMensagem(texto, maxLen = 3900) {
+  if (texto.length <= maxLen) return [texto];
+
+  const partes = [];
+  let atual = "";
+
+  for (const bloco of texto.split("\n\n")) {
+    const tentativa = atual ? atual + "\n\n" + bloco : bloco;
+    if (tentativa.length > maxLen) {
+      if (atual) partes.push(atual.trim());
+      atual = bloco;
+    } else {
+      atual = tentativa;
+    }
+  }
+
+  if (atual) partes.push(atual.trim());
+  return partes;
+}
+
 // ==========================
-// ROTA TESTE
+// ROTAS UTILITÁRIAS
 // ==========================
 app.get("/", (req, res) => {
-  res.send("Servidor rodando");
+  res.json({ status: "online", bot: "Clínica HairTech", versao: "2.0" });
+});
+
+app.get("/status", (req, res) => {
+  res.json({
+    status: "online",
+    conversasAtivas: Object.keys(conversas).length,
+    modelo: AI_MODEL
+  });
 });
 
 // ==========================
 // START SERVIDOR
 // ==========================
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log("Servidor rodando na porta " + PORT);
+  console.log(`HairTech Bot rodando na porta ${PORT}`);
+  console.log(`Modelo IA: ${AI_MODEL}`);
 });
