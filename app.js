@@ -105,15 +105,24 @@ app.post("/webhook", async (req, res) => {
         await notificarClinica(from, "Paciente com interesse em transplante capilar");
       }
 
+      // Detecta envio de PDF de orientação de fotos
+      const enviarPdf = resposta.includes("[PDF_FOTOS]");
+
       const respostaLimpa = resposta
         .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
         .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
+        .replace(/\[PDF_FOTOS\]/g, "")
         .trim();
 
       const partes = dividirMensagem(respostaLimpa);
       for (const parte of partes) {
         await enviarMensagem(from, parte);
         if (partes.length > 1) await new Promise(r => setTimeout(r, 600));
+      }
+
+      if (enviarPdf) {
+        await new Promise(r => setTimeout(r, 800));
+        await enviarPdfOrientacaoFotos(from);
       }
     }
 
@@ -194,6 +203,36 @@ async function enviarMensagem(to, mensagem) {
     );
   } catch (error) {
     console.error("Erro ao enviar:", error.response?.data || error.message);
+  }
+}
+
+// ==========================
+// PDF ORIENTAÇÃO DE FOTOS
+// ==========================
+async function enviarPdfOrientacaoFotos(to) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: to,
+        type: "document",
+        document: {
+          link: "https://drive.google.com/uc?export=download&id=1oYzUwyC1EdWpIZUb9dQDvwG1ipM1zdqz",
+          filename: "Guia de Orientacoes para Fotos - HairTech.pdf"
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 15000
+      }
+    );
+    console.log(`PDF de orientação enviado para ${to}`);
+  } catch (error) {
+    console.error("Erro ao enviar PDF:", error.response?.data || error.message);
   }
 }
 
