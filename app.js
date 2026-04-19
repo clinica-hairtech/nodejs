@@ -430,16 +430,13 @@ async function enviarPdfOrientacaoFotos(to) {
 // GUIA DE FOTOS POR GÊNERO
 // ==========================
 const GUIA_FOTOS_URL = {
-  masculino: process.env.GUIA_FOTOS_M || "https://drive.google.com/uc?export=download&id=18Hw5UpfApl0CG5mPUdSCtsAoKysEEvBd",
-  feminino:  process.env.GUIA_FOTOS_F || "https://drive.google.com/uc?export=download&id=1yFMQhCURScmw0SjHsASbkzVBSGl6CzLc"
+  masculino: process.env.GUIA_FOTOS_M || "https://lh3.googleusercontent.com/d/18Hw5UpfApl0CG5mPUdSCtsAoKysEEvBd",
+  feminino:  process.env.GUIA_FOTOS_F || "https://lh3.googleusercontent.com/d/1yFMQhCURScmw0SjHsASbkzVBSGl6CzLc"
 };
 
 async function enviarGuiaFotos(to, genero) {
   const url = GUIA_FOTOS_URL[genero];
-  if (!url) {
-    await enviarPdfOrientacaoFotos(to);
-    return;
-  }
+  if (!url) return;
   try {
     await axios.post(
       `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
@@ -447,13 +444,15 @@ async function enviarGuiaFotos(to, genero) {
         messaging_product: "whatsapp",
         to,
         type: "image",
-        image: { link: url, caption: "Guia de poses para as fotos — siga essas referencias para garantir a melhor avaliacao." }
+        image: {
+          link: url,
+          caption: "Use essa imagem como referencia para os angulos das fotos."
+        }
       },
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 15000 }
     );
   } catch (e) {
     console.error("Erro ao enviar guia de fotos:", e.response?.data || e.message);
-    await enviarPdfOrientacaoFotos(to);
   }
 }
 
