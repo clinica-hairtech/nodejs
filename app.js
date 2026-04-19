@@ -88,11 +88,18 @@ app.post("/webhook", async (req, res) => {
 
     const resposta = await obterRespostaIA(from, userMessage);
 
-    // Divide mensagens longas no limite do WhatsApp
-    const partes = dividirMensagem(resposta);
-    for (const parte of partes) {
-      await enviarMensagem(from, parte);
-      if (partes.length > 1) await new Promise(r => setTimeout(r, 600));
+    // Detecta se a IA quer enviar o botão do especialista
+    if (resposta.includes("[BOTAO_ESPECIALISTA]")) {
+      const textoAntes = resposta.split("[BOTAO_ESPECIALISTA]")[0].trim();
+      if (textoAntes) await enviarMensagem(from, textoAntes);
+      await new Promise(r => setTimeout(r, 500));
+      await enviarBotaoEspecialista(from);
+    } else {
+      const partes = dividirMensagem(resposta);
+      for (const parte of partes) {
+        await enviarMensagem(from, parte);
+        if (partes.length > 1) await new Promise(r => setTimeout(r, 600));
+      }
     }
 
   } catch (error) {
@@ -172,6 +179,46 @@ async function enviarMensagem(to, mensagem) {
     );
   } catch (error) {
     console.error("Erro ao enviar:", error.response?.data || error.message);
+  }
+}
+
+// ==========================
+// BOTÃO ESPECIALISTA
+// ==========================
+async function enviarBotaoEspecialista(to) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: to,
+        type: "interactive",
+        interactive: {
+          type: "cta_url",
+          body: {
+            text: "Clique no botão abaixo para falar com um dos nossos especialistas e dar continuidade ao seu agendamento:"
+          },
+          action: {
+            name: "cta_url",
+            parameters: {
+              display_text: "Falar com Especialista",
+              url: "https://wa.me/message/AYEFKCOTY24ZC1"
+            }
+          }
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 10000
+      }
+    );
+  } catch (error) {
+    // Fallback: envia link como texto se o botão falhar
+    console.error("Botão falhou, enviando como texto:", error.response?.data || error.message);
+    await enviarMensagem(to, "Para dar continuidade ao seu agendamento, fale com um dos nossos especialistas:\n\nhttps://wa.me/message/AYEFKCOTY24ZC1");
   }
 }
 
