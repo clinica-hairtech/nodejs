@@ -48,7 +48,7 @@ app.get("/webhook", (req, res) => {
 // RECEBER MENSAGENS
 // ==========================
 app.post("/webhook", async (req, res) => {
-  res.sendStatus(200); // Responde imediatamente ao WhatsApp
+  res.sendStatus(200);
 
   try {
     const value = req.body.entry?.[0]?.changes?.[0]?.value;
@@ -56,7 +56,6 @@ app.post("/webhook", async (req, res) => {
 
     if (!message) return;
 
-    // Deduplicação
     const msgId = message.id;
     if (idsProcessados.has(msgId)) return;
     idsProcessados.add(msgId);
@@ -87,49 +86,69 @@ app.post("/webhook", async (req, res) => {
 
     console.log(`[${from}] ${userMessage.substring(0, 120)}`);
 
+    // Marca mensagem como lida (✓✓ azul)
+    await marcarComoLido(msgId);
+
+    // Delay humanizado antes de responder
+    await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
+
     const resposta = await obterRespostaIA(from, userMessage);
 
-    // Detecta marcadores especiais na resposta da IA
-    if (resposta.includes("[BOTAO_ESPECIALISTA]")) {
-      const textoAntes = resposta.split("[BOTAO_ESPECIALISTA]")[0].trim();
-      if (textoAntes) await enviarMensagem(from, textoAntes);
-      await new Promise(r => setTimeout(r, 500));
-      await enviarBotaoEspecialista(from);
-      await notificarClinica(from, "Comprovante recebido — paciente encaminhado para especialista");
-    } else {
-      // Detecta outros momentos de alto interesse
-      if (resposta.includes("[NOTIF_AGENDAMENTO]")) {
-        await notificarClinica(from, "Paciente confirmou interesse em agendar consulta");
-      }
-      if (resposta.includes("[NOTIF_TRANSPLANTE]")) {
-        await notificarClinica(from, "Paciente com interesse em transplante capilar");
-      }
-
-      // Detecta envio de PDF de orientação de fotos
-      const enviarPdf = resposta.includes("[PDF_FOTOS]");
-
-      const respostaLimpa = resposta
-        .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
-        .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
-        .replace(/\[PDF_FOTOS\]/g, "")
-        .trim();
-
-      const partes = dividirMensagem(respostaLimpa);
-      for (const parte of partes) {
-        await enviarMensagem(from, parte);
-        if (partes.length > 1) await new Promise(r => setTimeout(r, 600));
-      }
-
-      if (enviarPdf) {
-        await new Promise(r => setTimeout(r, 800));
-        await enviarPdfOrientacaoFotos(from);
-      }
-    }
+    // Processa marcadores especiais
+    await processarResposta(from, resposta);
 
   } catch (error) {
     console.error("Erro no webhook:", error.message);
   }
 });
+
+// ==========================
+// PROCESSADOR DE RESPOSTA
+// ==========================
+async function processarResposta(from, resposta) {
+  if (resposta.includes("[BOTAO_ESPECIALISTA]")) {
+    const textoAntes = resposta.split("[BOTAO_ESPECIALISTA]")[0].trim();
+    if (textoAntes) await enviarMensagem(from, textoAntes);
+    await new Promise(r => setTimeout(r, 500));
+    await enviarBotaoEspecialista(from);
+    await notificarClinica(from, "Comprovante recebido — paciente encaminhado para especialista");
+    return;
+  }
+
+  if (resposta.includes("[MENU_INICIAL]")) {
+    const textoAntes = resposta.split("[MENU_INICIAL]")[0].trim();
+    if (textoAntes) await enviarMensagem(from, textoAntes);
+    await new Promise(r => setTimeout(r, 500));
+    await enviarMenuInicial(from);
+    return;
+  }
+
+  if (resposta.includes("[NOTIF_AGENDAMENTO]")) {
+    await notificarClinica(from, "Paciente confirmou interesse em agendar consulta");
+  }
+  if (resposta.includes("[NOTIF_TRANSPLANTE]")) {
+    await notificarClinica(from, "Paciente com interesse em transplante capilar");
+  }
+
+  const enviarPdf = resposta.includes("[PDF_FOTOS]");
+
+  const respostaLimpa = resposta
+    .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
+    .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
+    .replace(/\[PDF_FOTOS\]/g, "")
+    .trim();
+
+  const partes = dividirMensagem(respostaLimpa);
+  for (const parte of partes) {
+    await enviarMensagem(from, parte);
+    if (partes.length > 1) await new Promise(r => setTimeout(r, 700));
+  }
+
+  if (enviarPdf) {
+    await new Promise(r => setTimeout(r, 800));
+    await enviarPdfOrientacaoFotos(from);
+  }
+}
 
 // ==========================
 // RESPOSTA DA IA
@@ -142,7 +161,6 @@ async function obterRespostaIA(numero, mensagem) {
   conversas[numero].ultimaAtividade = Date.now();
   conversas[numero].historico.push({ role: "user", content: mensagem });
 
-  // Manter últimas 30 mensagens (15 trocas)
   if (conversas[numero].historico.length > 30) {
     conversas[numero].historico = conversas[numero].historico.slice(-30);
   }
@@ -177,6 +195,85 @@ async function obterRespostaIA(numero, mensagem) {
   } catch (error) {
     console.error("Erro na IA:", error.response?.data || error.message);
     return "Desculpa, tive uma dificuldade técnica agora. Pode repetir sua mensagem?";
+  }
+}
+
+// ==========================
+// MARCAR COMO LIDO
+// ==========================
+async function marcarComoLido(messageId) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 5000
+      }
+    );
+  } catch (_) { /* silent fail */ }
+}
+
+// ==========================
+// MENU INICIAL INTERATIVO
+// ==========================
+async function enviarMenuInicial(to) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: to,
+        type: "interactive",
+        interactive: {
+          type: "list",
+          header: { type: "text", text: "Clinica HairTech" },
+          body: {
+            text: "Para te direcionar corretamente, selecione uma das opcoes abaixo:"
+          },
+          action: {
+            button: "Ver opcoes",
+            sections: [
+              {
+                title: "Como posso te ajudar?",
+                rows: [
+                  { id: "paciente_antigo",      title: "Ja sou paciente" },
+                  { id: "iniciar_tratamento",   title: "Quero iniciar tratamento" },
+                  { id: "agendar_consulta",     title: "Agendar consulta" },
+                  { id: "falar_atendente",      title: "Falar com um atendente" },
+                  { id: "tirar_duvidas",        title: "Tirar duvidas" }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 10000
+      }
+    );
+  } catch (error) {
+    // Fallback: envia menu como texto
+    console.error("Menu interativo falhou, enviando como texto:", error.response?.data || error.message);
+    await enviarMensagem(to,
+      "Para te direcionar corretamente, me conta qual dessas opcoes faz mais sentido para voce:\n\n" +
+      "1. Ja sou paciente\n" +
+      "2. Quero iniciar tratamento\n" +
+      "3. Agendar consulta\n" +
+      "4. Falar com um atendente\n" +
+      "5. Tirar duvidas"
+    );
   }
 }
 
@@ -230,19 +327,19 @@ async function enviarPdfOrientacaoFotos(to) {
         timeout: 15000
       }
     );
-    console.log(`PDF de orientação enviado para ${to}`);
+    console.log(`PDF enviado para ${to}`);
   } catch (error) {
     console.error("Erro ao enviar PDF:", error.response?.data || error.message);
   }
 }
 
 // ==========================
-// NOTIFICAÇÃO INTERNA CLÍNICA
+// NOTIFICAÇÃO INTERNA
 // ==========================
 async function notificarClinica(numeroPaciente, motivo) {
   if (!NOTIFY_PHONE) return;
   try {
-    const texto = `*HairTech — Novo Interesse*\n\nPaciente: +${numeroPaciente}\nMotivo: ${motivo}\n\nAssuma o atendimento quando possível.`;
+    const texto = `*HairTech — Novo Interesse*\n\nPaciente: +${numeroPaciente}\nMotivo: ${motivo}\n\nAssuma o atendimento quando possivel.`;
     await axios.post(
       `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
       {
@@ -259,9 +356,9 @@ async function notificarClinica(numeroPaciente, motivo) {
         timeout: 10000
       }
     );
-    console.log(`Notificação enviada para clínica: ${motivo}`);
+    console.log(`Notificacao enviada: ${motivo}`);
   } catch (error) {
-    console.error("Erro ao notificar clínica:", error.response?.data || error.message);
+    console.error("Erro ao notificar:", error.response?.data || error.message);
   }
 }
 
@@ -279,7 +376,7 @@ async function enviarBotaoEspecialista(to) {
         interactive: {
           type: "cta_url",
           body: {
-            text: "Clique no botão abaixo para falar com um dos nossos especialistas e dar continuidade ao seu agendamento:"
+            text: "Clique no botao abaixo para falar com um dos nossos especialistas e dar continuidade ao seu agendamento:"
           },
           action: {
             name: "cta_url",
@@ -299,19 +396,18 @@ async function enviarBotaoEspecialista(to) {
       }
     );
   } catch (error) {
-    // Fallback: envia link como texto se o botão falhar
-    console.error("Botão falhou, enviando como texto:", error.response?.data || error.message);
+    console.error("Botao falhou, enviando como texto:", error.response?.data || error.message);
     await enviarMensagem(to, "Para dar continuidade ao seu agendamento, fale com um dos nossos especialistas:\n\nhttps://wa.me/message/AYEFKCOTY24ZC1");
   }
 }
 
-// Divide texto longo em partes menores respeitando parágrafos
+// ==========================
+// UTILITÁRIOS
+// ==========================
 function dividirMensagem(texto, maxLen = 3900) {
   if (texto.length <= maxLen) return [texto];
-
   const partes = [];
   let atual = "";
-
   for (const bloco of texto.split("\n\n")) {
     const tentativa = atual ? atual + "\n\n" + bloco : bloco;
     if (tentativa.length > maxLen) {
@@ -321,16 +417,12 @@ function dividirMensagem(texto, maxLen = 3900) {
       atual = tentativa;
     }
   }
-
   if (atual) partes.push(atual.trim());
   return partes;
 }
 
-// ==========================
-// ROTAS UTILITÁRIAS
-// ==========================
 app.get("/", (req, res) => {
-  res.json({ status: "online", bot: "Clínica HairTech", versao: "2.0" });
+  res.json({ status: "online", bot: "Clinica HairTech", versao: "2.1" });
 });
 
 app.get("/status", (req, res) => {
@@ -341,9 +433,6 @@ app.get("/status", (req, res) => {
   });
 });
 
-// ==========================
-// START SERVIDOR
-// ==========================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`HairTech Bot rodando na porta ${PORT}`);
