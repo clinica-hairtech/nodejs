@@ -16,6 +16,7 @@ const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const AI_MODEL         = process.env.AI_MODEL || "openai/gpt-4o-mini";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
+const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
 
 // Estado global das conversas (carregado do banco na inicialização)
@@ -39,6 +40,149 @@ setInterval(() => {
     db.salvarConversa(numero, conversas[numero]).catch(() => {});
   }
 }, 2 * 60 * 1000);
+
+// ==========================
+// COMANDOS DO DONO (via WhatsApp)
+// ==========================
+async function processarComando(texto) {
+  const t = texto.trim();
+  const lower = t.toLowerCase();
+
+  const responder = (msg) => enviarMensagem(OWNER_PHONE, msg);
+
+  // /ajuda
+  if (lower === "/ajuda" || lower === "ajuda") {
+    return responder(
+      "*Comandos disponíveis:*\n\n" +
+      "*/status* — ver resumo das conversas\n" +
+      "*/todos [msg]* — enviar para todos os ativos\n" +
+      "*/quentes [msg]* — enviar para leads quentes\n" +
+      "*/mornos [msg]* — enviar para leads mornos\n" +
+      "*/semresposta [msg]* — enviar para quem não respondeu\n" +
+      "*/inativos [msg]* — enviar para inativos há +48h\n" +
+      "*/msg [número] [texto]* — enviar para um paciente\n" +
+      "*/pausar [número]* — pausar bot para um número\n" +
+      "*/retomar [número]* — retomar bot para um número\n\n" +
+      "Exemplo: /todos Olá! Temos novidade na clínica."
+    );
+  }
+
+  // /status
+  if (lower === "/status" || lower === "status") {
+    const total   = Object.keys(conversas).length;
+    const ativos  = Object.values(conversas).filter(c => c.status === "ativo").length;
+    const humanos = Object.values(conversas).filter(c => c.status === "humano").length;
+    const quentes = Object.values(conversas).filter(c => c.temperatura === "quente").length;
+    const mornos  = Object.values(conversas).filter(c => c.temperatura === "morno").length;
+    const frios   = Object.values(conversas).filter(c => c.temperatura === "frio").length;
+    const semResp = Object.values(conversas).filter(c => {
+      const h = c.historico || [];
+      return h.length > 0 && h[h.length - 1].role === "assistant" && c.status === "ativo";
+    }).length;
+    return responder(
+      `*HairTech — Status atual*\n\n` +
+      `Total de conversas: ${total}\n` +
+      `Bot ativo: ${ativos}\n` +
+      `Com humano: ${humanos}\n\n` +
+      `Leads quentes: ${quentes}\n` +
+      `Leads mornos: ${mornos}\n` +
+      `Leads frios: ${frios}\n` +
+      `Aguardando resposta: ${semResp}`
+    );
+  }
+
+  // /pausar [número]
+  if (lower.startsWith("/pausar ")) {
+    const numero = t.substring(8).trim().replace(/\D/g, "");
+    if (conversas[numero]) {
+      conversas[numero].status = "pausado";
+      conversas[numero].proximaRetomada = null;
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+      return responder(`Bot pausado para +${numero}.`);
+    }
+    return responder(`Número +${numero} não encontrado.`);
+  }
+
+  // /retomar [número]
+  if (lower.startsWith("/retomar ")) {
+    const numero = t.substring(9).trim().replace(/\D/g, "");
+    if (conversas[numero]) {
+      conversas[numero].status = "ativo";
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+      return responder(`Bot retomado para +${numero}.`);
+    }
+    return responder(`Número +${numero} não encontrado.`);
+  }
+
+  // /msg [número] [texto]
+  if (lower.startsWith("/msg ")) {
+    const partes = t.substring(5).trim().split(" ");
+    const numero = partes[0].replace(/\D/g, "");
+    const mensagem = partes.slice(1).join(" ");
+    if (!numero || !mensagem) return responder("Uso: /msg [número] [texto]");
+    await enviarMensagem(numero, mensagem);
+    if (conversas[numero]) {
+      conversas[numero].historico.push({ role: "assistant", content: mensagem });
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+    }
+    return responder(`Mensagem enviada para +${numero}.`);
+  }
+
+  // Funções de envio em massa
+  async function enviarEmMassa(filtro, mensagem) {
+    const alvos = Object.entries(conversas).filter(([, c]) => filtro(c));
+    if (alvos.length === 0) return responder("Nenhum paciente encontrado com esse filtro.");
+    await responder(`Enviando para ${alvos.length} paciente(s)... Aguarde.`);
+    let enviados = 0;
+    for (const [numero, c] of alvos) {
+      try {
+        await enviarMensagem(numero, mensagem);
+        c.historico.push({ role: "assistant", content: mensagem });
+        db.salvarConversa(numero, c).catch(() => {});
+        enviados++;
+        await new Promise(r => setTimeout(r, 800));
+      } catch (_) {}
+    }
+    return responder(`Concluido. Mensagem enviada para ${enviados} paciente(s).`);
+  }
+
+  // /todos [msg]
+  if (lower.startsWith("/todos ")) {
+    const msg = t.substring(7).trim();
+    return enviarEmMassa(c => c.status === "ativo", msg);
+  }
+
+  // /quentes [msg]
+  if (lower.startsWith("/quentes ")) {
+    const msg = t.substring(9).trim();
+    return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "quente", msg);
+  }
+
+  // /mornos [msg]
+  if (lower.startsWith("/mornos ")) {
+    const msg = t.substring(8).trim();
+    return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "morno", msg);
+  }
+
+  // /semresposta [msg] — bot enviou último, paciente não respondeu
+  if (lower.startsWith("/semresposta ")) {
+    const msg = t.substring(13).trim();
+    return enviarEmMassa(c => {
+      const h = c.historico || [];
+      return c.status === "ativo" && h.length > 0 && h[h.length - 1].role === "assistant";
+    }, msg);
+  }
+
+  // /inativos [msg] — sem atividade há mais de 48h
+  if (lower.startsWith("/inativos ")) {
+    const msg = t.substring(10).trim();
+    const limite = Date.now() - 48 * 60 * 60 * 1000;
+    return enviarEmMassa(c => c.status === "ativo" && c.ultimaAtividade < limite, msg);
+  }
+
+  // Comando não reconhecido
+  return responder(`Comando nao reconhecido. Envie */ajuda* para ver os comandos disponíveis.`);
+}
 
 // ==========================
 // CLASSIFICAÇÃO DE LEAD
@@ -95,6 +239,12 @@ app.post("/webhook", async (req, res) => {
     idsProcessados.add(msgId);
 
     const from = message.from;
+
+    // Comandos do Dr. Ricardo
+    if (from === OWNER_PHONE && message.type === "text") {
+      await processarComando(message.text.body);
+      return;
+    }
 
     // Inicializa conversa se nova
     if (!conversas[from]) {
