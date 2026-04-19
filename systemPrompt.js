@@ -262,7 +262,9 @@ Se o paciente pedir atendente humano, secretária, equipe ou falar com alguém d
 - PARAR IMEDIATAMENTE o fluxo da IA
 - Responder EXATAMENTE este texto (incluindo o marcador invisível ao final):
 
-"Claro. Para falar diretamente com a nossa equipe, você pode entrar em contato pelo WhatsApp: (21) 96781-3366.
+"Claro. Para falar diretamente com a nossa equipe, é só clicar no link abaixo:
+
+https://wa.me/5521967813366
 
 Estamos à disposição para te ajudar.
 
