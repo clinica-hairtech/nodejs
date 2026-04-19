@@ -435,9 +435,10 @@ async function processarResposta(from, resposta) {
     await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix");
     conversas[from].status = "humano";
     conversas[from].proximaRetomada = null;
-    // Gera vídeo personalizado do Dr. Ricardo em background (não bloqueia resposta)
-    const motivoVideo = conversas[from]?.tipo === "transplante" ? "transplante" : "consulta";
-    setTimeout(() => enviarVideoPersonalizado(from, motivoVideo).catch(() => {}), 3000);
+    // Vídeo HeyGen apenas para transplante (maior valor — economiza créditos)
+    if (conversas[from]?.tipo === "transplante") {
+      setTimeout(() => enviarVideoPersonalizado(from, "transplante").catch(() => {}), 3000);
+    }
     return;
   }
 
