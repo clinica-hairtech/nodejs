@@ -264,7 +264,7 @@ Se o paciente pedir atendente humano, secretária, equipe ou falar com alguém d
 
 "Claro. Para falar diretamente com a nossa equipe, é só clicar no link abaixo:
 
-https://wa.me/5521967813366
+https://wa.me/message/AYEFKCOTY24ZC1
 
 Estamos à disposição para te ajudar.
 
