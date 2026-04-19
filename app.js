@@ -10,6 +10,7 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const AI_MODEL = process.env.AI_MODEL || "openai/gpt-4o-mini";
+const NOTIFY_PHONE = process.env.NOTIFY_PHONE || "5521967813366";
 
 // Conversation history per user (in-memory)
 const conversas = {};
@@ -88,14 +89,28 @@ app.post("/webhook", async (req, res) => {
 
     const resposta = await obterRespostaIA(from, userMessage);
 
-    // Detecta se a IA quer enviar o botão do especialista
+    // Detecta marcadores especiais na resposta da IA
     if (resposta.includes("[BOTAO_ESPECIALISTA]")) {
       const textoAntes = resposta.split("[BOTAO_ESPECIALISTA]")[0].trim();
       if (textoAntes) await enviarMensagem(from, textoAntes);
       await new Promise(r => setTimeout(r, 500));
       await enviarBotaoEspecialista(from);
+      await notificarClinica(from, "Comprovante recebido — paciente encaminhado para especialista");
     } else {
-      const partes = dividirMensagem(resposta);
+      // Detecta outros momentos de alto interesse
+      if (resposta.includes("[NOTIF_AGENDAMENTO]")) {
+        await notificarClinica(from, "Paciente confirmou interesse em agendar consulta");
+      }
+      if (resposta.includes("[NOTIF_TRANSPLANTE]")) {
+        await notificarClinica(from, "Paciente com interesse em transplante capilar");
+      }
+
+      const respostaLimpa = resposta
+        .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
+        .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
+        .trim();
+
+      const partes = dividirMensagem(respostaLimpa);
       for (const parte of partes) {
         await enviarMensagem(from, parte);
         if (partes.length > 1) await new Promise(r => setTimeout(r, 600));
@@ -179,6 +194,35 @@ async function enviarMensagem(to, mensagem) {
     );
   } catch (error) {
     console.error("Erro ao enviar:", error.response?.data || error.message);
+  }
+}
+
+// ==========================
+// NOTIFICAÇÃO INTERNA CLÍNICA
+// ==========================
+async function notificarClinica(numeroPaciente, motivo) {
+  if (!NOTIFY_PHONE) return;
+  try {
+    const texto = `*HairTech — Novo Interesse*\n\nPaciente: +${numeroPaciente}\nMotivo: ${motivo}\n\nAssuma o atendimento quando possível.`;
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: NOTIFY_PHONE,
+        type: "text",
+        text: { body: texto }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 10000
+      }
+    );
+    console.log(`Notificação enviada para clínica: ${motivo}`);
+  } catch (error) {
+    console.error("Erro ao notificar clínica:", error.response?.data || error.message);
   }
 }
 

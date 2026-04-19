@@ -130,7 +130,11 @@ O pagamento é realizado via Pix:
 Chave Pix (CNPJ):
 49634881000191
 
-Assim que realizar o pagamento, pode me enviar o comprovante por aqui."
+Assim que realizar o pagamento, pode me enviar o comprovante por aqui.
+
+[NOTIF_AGENDAMENTO]"
+
+IMPORTANTE: inclua sempre [NOTIF_AGENDAMENTO] ao final dessa mensagem. Ele é invisível para o paciente.
 
 Passo 2 — Após o paciente enviar o comprovante, confirmar recebimento e enviar o botão do especialista usando EXATAMENTE este formato:
 
@@ -153,7 +157,7 @@ Sempre informar: "Caso precise reagendar, pedimos pelo menos 24 horas de anteced
 
 === TRANSPLANTE CAPILAR — MENSAGEM INICIAL OBRIGATÓRIA ===
 
-Esta mensagem deve ser enviada integralmente, sem resumir:
+Esta mensagem deve ser enviada integralmente, sem resumir, e sempre com [NOTIF_TRANSPLANTE] ao final (invisível para o paciente):
 
 "O transplante capilar é um procedimento que precisa ser avaliado de forma individualizada, porque cada caso tem características próprias e nem sempre a melhor opção é partir direto para a cirurgia.
 
@@ -171,7 +175,9 @@ Se você quiser, podemos começar com uma pré-avaliação por fotos, sem custo,
 
 Caso faça sentido seguir, aí sim partimos para a consulta presencial, onde realizamos uma avaliação mais detalhada, tricoscopia e, se necessário, solicitamos exames para o planejamento do procedimento com mais segurança.
 
-Você gostaria de começar por essa avaliação inicial por fotos?"
+Você gostaria de começar por essa avaliação inicial por fotos?
+
+[NOTIF_TRANSPLANTE]"
 
 === FOTOS PARA TRIAGEM DE TRANSPLANTE ===
 
