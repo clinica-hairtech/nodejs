@@ -112,9 +112,17 @@ app.post("/webhook", async (req, res) => {
     if (message.type === "text") {
       userMessage = message.text.body;
     } else if (message.type === "image") {
-      // Analisa imagem com visão IA
-      const tipo = await analisarImagem(message.image.id);
+      const imageId = message.image.id;
+      const tipo = await analisarImagem(imageId);
       userMessage = `[IMAGEM: ${tipo}]`;
+
+      // Encaminha foto de cabelo para o Dr. Ricardo avaliar
+      if (tipo === "FOTO_CABELO") {
+        encaminharFotoParaClinica(from, imageId).catch(e =>
+          console.error("Erro ao encaminhar foto:", e.message)
+        );
+        c.aguardandoAvaliacao = true;
+      }
     } else if (message.type === "audio" || message.type === "voice") {
       userMessage = "[O paciente enviou um áudio]";
     } else if (message.type === "document") {
@@ -453,6 +461,64 @@ async function enviarGuiaFotos(to, genero) {
     );
   } catch (e) {
     console.error("Erro ao enviar guia de fotos:", e.response?.data || e.message);
+  }
+}
+
+// ==========================
+// ENCAMINHAR FOTO PARA CLÍNICA
+// ==========================
+async function encaminharFotoParaClinica(from, imageId) {
+  if (!NOTIFY_PHONE) return;
+  try {
+    // Obtém URL da imagem
+    const meta = await axios.get(
+      `https://graph.facebook.com/v18.0/${imageId}`,
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 10000 }
+    );
+    const imageUrl = meta.data.url;
+    const mimeType = meta.data.mime_type || "image/jpeg";
+
+    // Baixa a imagem
+    const imgResp = await axios.get(imageUrl, {
+      responseType: "arraybuffer",
+      headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
+      timeout: 15000
+    });
+
+    // Faz upload para WhatsApp Media API
+    const blob = new Blob([imgResp.data], { type: mimeType });
+    const formData = new FormData();
+    formData.append("messaging_product", "whatsapp");
+    formData.append("type", mimeType);
+    formData.append("file", blob, "foto_paciente.jpg");
+
+    const uploadResp = await fetch(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/media`,
+      { method: "POST", headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, body: formData }
+    );
+    const uploadData = await uploadResp.json();
+
+    if (!uploadData.id) {
+      console.error("Upload falhou:", uploadData);
+      return;
+    }
+
+    // Envia para o Dr. Ricardo
+    const caption = `*HairTech — Foto para avaliacao*\nPaciente: +${from}\n\nAnalise e use o painel /admin para dar continuidade ao atendimento.`;
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: NOTIFY_PHONE,
+        type: "image",
+        image: { id: uploadData.id, caption }
+      },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 }
+    );
+
+    console.log(`Foto encaminhada para clinica: paciente ${from}`);
+  } catch (e) {
+    console.error("Erro ao encaminhar foto:", e.response?.data || e.message);
   }
 }
 
