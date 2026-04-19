@@ -2,10 +2,40 @@
 const axios = require("axios");
 
 const HEYGEN_API_KEY  = process.env.HEYGEN_API_KEY;
-const HEYGEN_AVATAR   = process.env.HEYGEN_AVATAR_ID;
-const HEYGEN_VOICE    = process.env.HEYGEN_VOICE_ID;
+const HEYGEN_AVATAR   = process.env.HEYGEN_AVATAR_ID  || "556225e70c4841b7a1c038a702b704c2";
 const WHATSAPP_TOKEN  = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+
+// Cache para não buscar a voz toda vez
+let vozCache = process.env.HEYGEN_VOICE_ID || null;
+
+async function resolverVoz() {
+  if (vozCache) return vozCache;
+  try {
+    const resp = await axios.get("https://api.heygen.com/v2/voices", {
+      headers: { "X-Api-Key": HEYGEN_API_KEY },
+      timeout: 10000
+    });
+    const vozes = resp.data?.data?.voices || [];
+    // Prioriza voz masculina em português do Brasil
+    const ptBr = vozes.find(v =>
+      (v.language === "pt" || v.language === "pt-BR" || (v.locale || "").startsWith("pt")) &&
+      (v.gender === "male" || v.gender === "Male")
+    ) || vozes.find(v =>
+      (v.language === "pt" || v.language === "pt-BR" || (v.locale || "").startsWith("pt"))
+    );
+    if (ptBr) {
+      vozCache = ptBr.voice_id;
+      console.log(`HeyGen: voz selecionada — ${ptBr.name} (${ptBr.voice_id})`);
+      return vozCache;
+    }
+    console.error("HeyGen: nenhuma voz em português encontrada", vozes.slice(0, 3).map(v => v.language));
+    return null;
+  } catch (e) {
+    console.error("HeyGen: erro ao buscar vozes:", e.response?.data || e.message);
+    return null;
+  }
+}
 
 function scriptPara(motivo) {
   if (motivo === "transplante") {
@@ -14,13 +44,13 @@ function scriptPara(motivo) {
   return "Olá! Aqui é o Dr. Ricardo, da Clínica HairTech. Parabéns por dar esse passo! Sua consulta está quase confirmada e estamos ansiosos para te atender. Qualquer dúvida, é só chamar. Até breve!";
 }
 
-async function criarVideo(motivo) {
+async function criarVideo(motivo, voiceId) {
   const resp = await axios.post(
     "https://api.heygen.com/v2/video/generate",
     {
       video_inputs: [{
         character: { type: "avatar", avatar_id: HEYGEN_AVATAR, avatar_style: "normal" },
-        voice:     { type: "text", input_text: scriptPara(motivo), voice_id: HEYGEN_VOICE, speed: 1.0 },
+        voice:     { type: "text", input_text: scriptPara(motivo), voice_id: voiceId, speed: 1.0 },
         background: { type: "color", value: "#1a1a2e" }
       }],
       dimension: { width: 720, height: 1280 }
@@ -83,13 +113,17 @@ async function enviarVideoWpp(to, videoUrl) {
 }
 
 async function enviarVideoPersonalizado(to, motivo) {
-  if (!HEYGEN_API_KEY || !HEYGEN_AVATAR || !HEYGEN_VOICE) {
-    console.log("HeyGen não configurado — HEYGEN_API_KEY, HEYGEN_AVATAR_ID e HEYGEN_VOICE_ID necessários");
+  if (!HEYGEN_API_KEY) {
+    console.log("HeyGen: HEYGEN_API_KEY não configurado");
     return;
   }
   try {
-    const videoId = await criarVideo(motivo);
+    const voiceId = await resolverVoz();
+    if (!voiceId) { console.error("HeyGen: sem voice_id disponível"); return; }
+
+    const videoId = await criarVideo(motivo, voiceId);
     if (!videoId) { console.error("HeyGen: video_id não retornado"); return; }
+
     console.log(`HeyGen: gerando vídeo ${videoId} para ${to}...`);
     const url = await aguardarVideo(videoId);
     if (url) await enviarVideoWpp(to, url);
