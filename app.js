@@ -7,6 +7,7 @@ const lembretes = require("./lembretes");
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
@@ -24,6 +25,16 @@ const idsProcessados = new Set();
 iniciarRetomada(conversas, enviarMensagem);
 lembretes.iniciar(enviarMensagem);
 
+// ==========================
+// CLASSIFICAÇÃO DE LEAD
+// ==========================
+function classificarLead(texto) {
+  const t = texto.toLowerCase();
+  if (/(quero agendar|quero marcar|vou fazer|quero fazer|confirmar|pagar|fechar|marcar consulta|agendar agora)/.test(t)) return "quente";
+  if (/(transplante|calvic|quanto custa|qual o valor|valor da|custo|consulta|tratamento|interesse|gostaria|queda|cabelo|alopecia|mmp|falha|entrad)/.test(t)) return "morno";
+  return "frio";
+}
+
 // Limpeza a cada hora
 setInterval(() => idsProcessados.clear(), 60 * 60 * 1000);
 setInterval(() => {
@@ -37,7 +48,7 @@ setInterval(() => {
 // ==========================
 // PAINEL DE CONTROLE
 // ==========================
-app.use("/admin", adminRouter(conversas));
+app.use("/admin", adminRouter(conversas, enviarMensagem));
 
 // ==========================
 // VERIFICAÇÃO DO WEBHOOK
@@ -78,7 +89,9 @@ app.post("/webhook", async (req, res) => {
         status: "ativo",
         tipo: "novo",
         retomadas: 0,
-        proximaRetomada: null
+        proximaRetomada: null,
+        temperatura: "frio",
+        genero: null
       };
     }
 
@@ -116,6 +129,18 @@ app.post("/webhook", async (req, res) => {
     }
 
     console.log(`[${from}] ${userMessage.substring(0, 100)}`);
+
+    // Atualiza temperatura do lead
+    const novaTemp = classificarLead(userMessage);
+    if (novaTemp === "quente") c.temperatura = "quente";
+    else if (novaTemp === "morno" && c.temperatura !== "quente") c.temperatura = "morno";
+
+    // Detecta gênero do paciente
+    if (!c.genero) {
+      const tg = userMessage.toLowerCase();
+      if (/(sou mulher|sou feminino|paciente mulher|\bela\b|minha filha|minha esposa|\bfeminina\b)/.test(tg)) c.genero = "feminino";
+      else if (/(sou homem|sou masculino|paciente homem|\bele\b|meu filho|meu marido|\bmasculino\b)/.test(tg)) c.genero = "masculino";
+    }
 
     // Detecta tipo de paciente
     const msgLower = userMessage.toLowerCase();
@@ -210,7 +235,9 @@ async function processarResposta(from, resposta) {
     if (antes) await enviarMensagem(from, antes);
     await new Promise(r => setTimeout(r, 500));
     await enviarBotaoEspecialista(from);
-    await notificarClinica(from, "Comprovante recebido — paciente encaminhado para especialista");
+    await new Promise(r => setTimeout(r, 2000));
+    await enviarMensagem(from, "Um detalhe importante: para garantir a melhor análise na tricoscopia, pedimos que evite lavar o cabelo nas 24 a 48 horas antes da consulta.");
+    await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix");
     conversas[from].status = "humano";
     conversas[from].proximaRetomada = null;
     return;
@@ -235,11 +262,15 @@ async function processarResposta(from, resposta) {
     conversas[from].proximaRetomada = null;
   }
 
-  const enviarPdf = resposta.includes("[PDF_FOTOS]");
+  const enviarFotoM = resposta.includes("[PDF_FOTOS_M]");
+  const enviarFotoF = resposta.includes("[PDF_FOTOS_F]");
+  const enviarPdf   = resposta.includes("[PDF_FOTOS]");
 
   const limpa = resposta
     .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
     .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
+    .replace(/\[PDF_FOTOS_M\]/g, "")
+    .replace(/\[PDF_FOTOS_F\]/g, "")
     .replace(/\[PDF_FOTOS\]/g, "")
     .replace(/\[HUMANO\]/g, "")
     .trim();
@@ -250,9 +281,11 @@ async function processarResposta(from, resposta) {
     if (partes.length > 1) await new Promise(r => setTimeout(r, 700));
   }
 
-  if (enviarPdf) {
+  if (enviarPdf || enviarFotoM || enviarFotoF) {
     await new Promise(r => setTimeout(r, 800));
-    await enviarPdfOrientacaoFotos(from);
+    if (enviarFotoM) await enviarGuiaFotos(from, "masculino");
+    else if (enviarFotoF) await enviarGuiaFotos(from, "feminino");
+    else await enviarPdfOrientacaoFotos(from);
   }
 }
 
@@ -394,12 +427,45 @@ async function enviarPdfOrientacaoFotos(to) {
 }
 
 // ==========================
+// GUIA DE FOTOS POR GÊNERO
+// ==========================
+const GUIA_FOTOS_URL = {
+  masculino: process.env.GUIA_FOTOS_M || "",
+  feminino:  process.env.GUIA_FOTOS_F || ""
+};
+
+async function enviarGuiaFotos(to, genero) {
+  const url = GUIA_FOTOS_URL[genero];
+  if (!url) {
+    await enviarPdfOrientacaoFotos(to);
+    return;
+  }
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to,
+        type: "image",
+        image: { link: url, caption: "Guia de poses para as fotos — siga essas referencias para garantir a melhor avaliacao." }
+      },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 15000 }
+    );
+  } catch (e) {
+    console.error("Erro ao enviar guia de fotos:", e.response?.data || e.message);
+    await enviarPdfOrientacaoFotos(to);
+  }
+}
+
+// ==========================
 // NOTIFICAÇÃO INTERNA
 // ==========================
 async function notificarClinica(numeroPaciente, motivo) {
   if (!NOTIFY_PHONE) return;
   try {
-    const texto = `*HairTech — Novo Interesse*\n\nPaciente: +${numeroPaciente}\nMotivo: ${motivo}\n\nAssuma o atendimento quando possivel.`;
+    const temp = conversas[numeroPaciente]?.temperatura || "frio";
+    const emoji = temp === "quente" ? "LEAD QUENTE" : temp === "morno" ? "Lead morno" : "Lead frio";
+    const texto = `*HairTech — ${emoji}*\n\nPaciente: +${numeroPaciente}\nMotivo: ${motivo}\n\nAssuma o atendimento quando possivel.`;
     await axios.post(
       `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
       { messaging_product: "whatsapp", to: NOTIFY_PHONE, type: "text", text: { body: texto } },
