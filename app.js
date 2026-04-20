@@ -493,38 +493,50 @@ async function processarResposta(from, resposta) {
 // ==========================
 // RESPOSTA DA IA
 // ==========================
+async function chamarIA(model, historico) {
+  const resp = await axios.post(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        ...historico.map(m => ({ role: m.role, content: m.content }))
+      ],
+      max_tokens: 1500,
+      temperature: 0.6
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      timeout: 25000
+    }
+  );
+  return resp.data.choices[0].message.content;
+}
+
 async function obterRespostaIA(numero, mensagem) {
   const c = conversas[numero];
   c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
   if (c.historico.length > 30) c.historico = c.historico.slice(-30);
 
+  // Tenta GPT-4o-mini primeiro, cai para Claude Haiku se falhar
   try {
-    const resp = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: AI_MODEL,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          ...c.historico.map(m => ({ role: m.role, content: m.content }))
-        ],
-        max_tokens: 1500,
-        temperature: 0.6
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 30000
-      }
-    );
-
-    const aiResp = resp.data.choices[0].message.content;
+    const aiResp = await chamarIA(AI_MODEL, c.historico);
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
     return aiResp;
-
   } catch (e) {
-    console.error("Erro na IA:", e.response?.data || e.message);
+    console.warn("GPT falhou, tentando Claude Haiku:", e.message);
+  }
+
+  try {
+    const aiResp = await chamarIA("anthropic/claude-haiku-4-5", c.historico);
+    c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
+    console.log("Resposta via Claude Haiku (fallback)");
+    return aiResp;
+  } catch (e) {
+    console.error("Fallback também falhou:", e.response?.data || e.message);
     return "Desculpa, tive uma dificuldade técnica agora. Pode repetir sua mensagem?";
   }
 }
