@@ -18,7 +18,7 @@ const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const AI_MODEL         = process.env.AI_MODEL || "anthropic/claude-opus-4-5";
+const AI_MODEL         = process.env.AI_MODEL || "openai/gpt-4o-mini";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
@@ -273,7 +273,9 @@ app.post("/webhook", async (req, res) => {
         retomadas: 0,
         proximaRetomada: null,
         temperatura: "frio",
-        genero: null
+        genero: null,
+        nome: null,
+        nota: null
       };
     }
 
@@ -493,7 +495,7 @@ async function processarResposta(from, resposta) {
 // ==========================
 async function obterRespostaIA(numero, mensagem) {
   const c = conversas[numero];
-  c.historico.push({ role: "user", content: mensagem });
+  c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
   if (c.historico.length > 30) c.historico = c.historico.slice(-30);
 
   try {
@@ -520,7 +522,7 @@ async function obterRespostaIA(numero, mensagem) {
     );
 
     const aiResp = resp.data.choices[0].message.content;
-    c.historico.push({ role: "assistant", content: aiResp });
+    c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
     return aiResp;
 
   } catch (e) {

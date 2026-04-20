@@ -20,6 +20,8 @@ async function init() {
         tipo TEXT DEFAULT 'novo',
         temperatura TEXT DEFAULT 'frio',
         genero TEXT,
+        nome TEXT,
+        nota TEXT,
         retomadas INTEGER DEFAULT 0,
         proxima_retomada BIGINT,
         ultima_atividade BIGINT,
@@ -28,6 +30,9 @@ async function init() {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
+
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS nome TEXT;
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS nota TEXT;
 
       CREATE TABLE IF NOT EXISTS mensagens (
         id SERIAL PRIMARY KEY,
@@ -64,6 +69,8 @@ async function carregarConversas() {
         tipo: row.tipo,
         temperatura: row.temperatura,
         genero: row.genero,
+        nome: row.nome || null,
+        nota: row.nota || null,
         retomadas: Number(row.retomadas) || 0,
         proximaRetomada: row.proxima_retomada ? Number(row.proxima_retomada) : null,
         ultimaAtividade: row.ultima_atividade ? Number(row.ultima_atividade) : Date.now(),
@@ -84,14 +91,16 @@ async function salvarConversa(numero, c) {
   try {
     await pool.query(`
       INSERT INTO conversations
-        (numero, status, tipo, temperatura, genero, retomadas,
+        (numero, status, tipo, temperatura, genero, nome, nota, retomadas,
          proxima_retomada, ultima_atividade, historico, aguardando_avaliacao, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
       ON CONFLICT (numero) DO UPDATE SET
         status = EXCLUDED.status,
         tipo = EXCLUDED.tipo,
         temperatura = EXCLUDED.temperatura,
         genero = EXCLUDED.genero,
+        nome = EXCLUDED.nome,
+        nota = EXCLUDED.nota,
         retomadas = EXCLUDED.retomadas,
         proxima_retomada = EXCLUDED.proxima_retomada,
         ultima_atividade = EXCLUDED.ultima_atividade,
@@ -104,6 +113,8 @@ async function salvarConversa(numero, c) {
       c.tipo || "novo",
       c.temperatura || "frio",
       c.genero || null,
+      c.nome || null,
+      c.nota || null,
       c.retomadas || 0,
       c.proximaRetomada || null,
       c.ultimaAtividade || Date.now(),
