@@ -17,8 +17,8 @@ app.use(express.urlencoded({ extended: true }));
 const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
-const OPENAI_API_KEY   = process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY;
-const AI_MODEL         = process.env.AI_MODEL || "gpt-4o-mini";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const AI_MODEL         = process.env.AI_MODEL || "openai/gpt-4o-mini";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
@@ -385,9 +385,9 @@ async function analisarImagem(imageId) {
 
     // 3. Envia para visão IA
     const resp = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "gpt-4o-mini",
+        model: "openai/gpt-4o-mini",
         messages: [{
           role: "user",
           content: [
@@ -405,7 +405,7 @@ async function analisarImagem(imageId) {
       },
       {
         headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json"
         },
         timeout: 20000
@@ -500,7 +500,7 @@ async function obterRespostaIA(numero, mensagem) {
 
   try {
     const resp = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         model: AI_MODEL,
         messages: [
@@ -512,7 +512,7 @@ async function obterRespostaIA(numero, mensagem) {
       },
       {
         headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json"
         },
         timeout: 30000
