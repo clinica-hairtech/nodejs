@@ -6,6 +6,9 @@ const adminRouter = require("./admin");
 const lembretes = require("./lembretes");
 const db = require("./db");
 const iniciarRelatorio = require("./relatorio");
+const { enviarVideoPersonalizado } = require("./heygen");
+const { formatarMensagemAgenda } = require("./calendar");
+const criarRoterNfse = require("./nfse");
 
 const app = express();
 app.use(express.json());
@@ -221,6 +224,7 @@ setInterval(() => {
 // PAINEL DE CONTROLE
 // ==========================
 app.use("/admin", adminRouter(conversas, enviarMensagem));
+app.use("/nfse", criarRoterNfse(enviarMensagem, NOTIFY_PHONE, ADMIN_PASS));
 
 // ==========================
 // VERIFICAÇÃO DO WEBHOOK
@@ -269,7 +273,9 @@ app.post("/webhook", async (req, res) => {
         retomadas: 0,
         proximaRetomada: null,
         temperatura: "frio",
-        genero: null
+        genero: null,
+        nome: null,
+        nota: null
       };
     }
 
@@ -431,6 +437,10 @@ async function processarResposta(from, resposta) {
     await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix");
     conversas[from].status = "humano";
     conversas[from].proximaRetomada = null;
+    // Vídeo HeyGen apenas para transplante (maior valor — economiza créditos)
+    if (conversas[from]?.tipo === "transplante") {
+      setTimeout(() => enviarVideoPersonalizado(from, "transplante").catch(() => {}), 3000);
+    }
     return;
   }
 
@@ -485,7 +495,7 @@ async function processarResposta(from, resposta) {
 // ==========================
 async function obterRespostaIA(numero, mensagem) {
   const c = conversas[numero];
-  c.historico.push({ role: "user", content: mensagem });
+  c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
   if (c.historico.length > 30) c.historico = c.historico.slice(-30);
 
   try {
@@ -512,7 +522,7 @@ async function obterRespostaIA(numero, mensagem) {
     );
 
     const aiResp = resp.data.choices[0].message.content;
-    c.historico.push({ role: "assistant", content: aiResp });
+    c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
     return aiResp;
 
   } catch (e) {
@@ -790,17 +800,25 @@ app.get("/status", async (req, res) => {
 });
 
 // API para registrar consulta agendada (usada pelo especialista após confirmar)
-app.post("/consulta", (req, res) => {
+app.post("/consulta", async (req, res) => {
   const { senha, numero, nome, data, unidade, tipo } = req.body;
   if (senha !== ADMIN_PASS) return res.status(401).json({ erro: "Não autorizado" });
   if (!numero || !data || !unidade) return res.status(400).json({ erro: "numero, data e unidade são obrigatórios" });
 
+  const dataObj = new Date(data);
+
   const id = lembretes.agendarLembrete(numero, {
     nome,
-    data: new Date(data),
+    data: dataObj,
     unidade,
     tipo: tipo || "consulta"
   });
+
+  // Envia link do Google Calendar para Dr. Ricardo
+  try {
+    const msgAgenda = formatarMensagemAgenda({ nome, data: dataObj, unidade, tipo, numero });
+    await enviarMensagem(NOTIFY_PHONE, msgAgenda);
+  } catch (_) {}
 
   res.json({ ok: true, id });
 });

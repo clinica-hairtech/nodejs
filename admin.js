@@ -243,19 +243,30 @@ module.exports = function(conversas, enviarMensagem) {
   // ===== AÇÕES =====
   router.get("/pausar/:numero", autenticar, (req, res) => {
     const { numero } = req.params;
-    if (conversas[numero]) { conversas[numero].status = "pausado"; conversas[numero].proximaRetomada = null; }
+    if (conversas[numero]) {
+      conversas[numero].status = "pausado";
+      conversas[numero].proximaRetomada = null;
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+    }
     res.redirect(`/admin?senha=${req.query.senha}`);
   });
 
   router.get("/retomar/:numero", autenticar, (req, res) => {
     const { numero } = req.params;
-    if (conversas[numero]) conversas[numero].status = "ativo";
+    if (conversas[numero]) {
+      conversas[numero].status = "ativo";
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+    }
     res.redirect(`/admin?senha=${req.query.senha}`);
   });
 
   router.get("/encerrar/:numero", autenticar, (req, res) => {
     const { numero } = req.params;
-    if (conversas[numero]) { conversas[numero].status = "encerrado"; conversas[numero].proximaRetomada = null; }
+    if (conversas[numero]) {
+      conversas[numero].status = "encerrado";
+      conversas[numero].proximaRetomada = null;
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+    }
     res.redirect(`/admin?senha=${req.query.senha}`);
   });
 
