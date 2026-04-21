@@ -574,11 +574,10 @@ async function enviarMenuInicial(to) {
             sections: [{
               title: "Como posso te ajudar?",
               rows: [
-                { id: "paciente_antigo",    title: "Ja sou paciente" },
-                { id: "iniciar_tratamento", title: "Quero iniciar tratamento" },
-                { id: "agendar_consulta",   title: "Agendar consulta" },
-                { id: "falar_atendente",    title: "Falar com um atendente" },
-                { id: "tirar_duvidas",      title: "Tirar duvidas" }
+                { id: "agendar_consulta",   title: "Quero agendar consulta",       description: "Garanta sua vaga agora" },
+                { id: "iniciar_tratamento", title: "Quero iniciar tratamento",      description: "Saiba como funciona" },
+                { id: "tirar_duvidas",      title: "Tenho duvidas — fale comigo",  description: "Tire todas as suas duvidas aqui" },
+                { id: "paciente_antigo",    title: "Ja sou paciente",               description: "Retorno ou reagendamento" }
               ]
             }]
           }
@@ -589,7 +588,7 @@ async function enviarMenuInicial(to) {
   } catch (e) {
     console.error("Menu falhou:", e.response?.data || e.message);
     await enviarMensagem(to,
-      "Para te direcionar corretamente:\n\n1. Ja sou paciente\n2. Quero iniciar tratamento\n3. Agendar consulta\n4. Falar com um atendente\n5. Tirar duvidas"
+      "Para te direcionar corretamente:\n\n1. Quero agendar consulta\n2. Quero iniciar tratamento\n3. Tenho duvidas — fale comigo\n4. Ja sou paciente"
     );
   }
 }

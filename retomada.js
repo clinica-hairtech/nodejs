@@ -15,22 +15,21 @@ const TEXTOS = {
   ]
 };
 
-// Intervalos em ms: 2h, 24h, 72h, 7d, 30d, 90d
+// Intervalos em ms: 5min, 30min, 2h, 24h, 72h (3 dias) → encerra
 const INTERVALOS_NOVO = [
-  2 * 60 * 60 * 1000,
+  5  * 60 * 1000,
+  30 * 60 * 1000,
+  2  * 60 * 60 * 1000,
   24 * 60 * 60 * 1000,
-  72 * 60 * 60 * 1000,
-  7  * 24 * 60 * 60 * 1000,
-  30 * 24 * 60 * 60 * 1000,
-  90 * 24 * 60 * 60 * 1000
+  72 * 60 * 60 * 1000
 ];
 
-// Intervalos: 24h, 7d, 30d, 90d
+// Paciente antigo: 30min, 2h, 24h, 72h
 const INTERVALOS_ANTIGO = [
+  30 * 60 * 1000,
+  2  * 60 * 60 * 1000,
   24 * 60 * 60 * 1000,
-  7  * 24 * 60 * 60 * 1000,
-  30 * 24 * 60 * 60 * 1000,
-  90 * 24 * 60 * 60 * 1000
+  72 * 60 * 60 * 1000
 ];
 
 function dentroDoHorario() {

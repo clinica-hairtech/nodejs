@@ -33,6 +33,9 @@ async function init() {
 
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS nome TEXT;
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS nota TEXT;
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS tags TEXT DEFAULT '';
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS valor NUMERIC DEFAULT 0;
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS origem TEXT DEFAULT 'whatsapp';
 
       CREATE TABLE IF NOT EXISTS mensagens (
         id SERIAL PRIMARY KEY,
@@ -71,6 +74,9 @@ async function carregarConversas() {
         genero: row.genero,
         nome: row.nome || null,
         nota: row.nota || null,
+        tags: row.tags || "",
+        valor: Number(row.valor) || 0,
+        origem: row.origem || "whatsapp",
         retomadas: Number(row.retomadas) || 0,
         proximaRetomada: row.proxima_retomada ? Number(row.proxima_retomada) : null,
         ultimaAtividade: row.ultima_atividade ? Number(row.ultima_atividade) : Date.now(),
@@ -91,9 +97,9 @@ async function salvarConversa(numero, c) {
   try {
     await pool.query(`
       INSERT INTO conversations
-        (numero, status, tipo, temperatura, genero, nome, nota, retomadas,
-         proxima_retomada, ultima_atividade, historico, aguardando_avaliacao, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+        (numero, status, tipo, temperatura, genero, nome, nota, tags, valor, origem,
+         retomadas, proxima_retomada, ultima_atividade, historico, aguardando_avaliacao, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
       ON CONFLICT (numero) DO UPDATE SET
         status = EXCLUDED.status,
         tipo = EXCLUDED.tipo,
@@ -101,6 +107,9 @@ async function salvarConversa(numero, c) {
         genero = EXCLUDED.genero,
         nome = EXCLUDED.nome,
         nota = EXCLUDED.nota,
+        tags = EXCLUDED.tags,
+        valor = EXCLUDED.valor,
+        origem = EXCLUDED.origem,
         retomadas = EXCLUDED.retomadas,
         proxima_retomada = EXCLUDED.proxima_retomada,
         ultima_atividade = EXCLUDED.ultima_atividade,
@@ -115,6 +124,9 @@ async function salvarConversa(numero, c) {
       c.genero || null,
       c.nome || null,
       c.nota || null,
+      c.tags || "",
+      c.valor || 0,
+      c.origem || "whatsapp",
       c.retomadas || 0,
       c.proximaRetomada || null,
       c.ultimaAtividade || Date.now(),
