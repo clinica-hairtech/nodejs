@@ -58,18 +58,23 @@ async function processarComando(texto) {
   // /ajuda
   if (lower === "/ajuda" || lower === "ajuda") {
     return responder(
-      "*Comandos disponíveis:*\n\n" +
-      "*/status* — resumo das conversas ativas\n" +
-      "*/relatorio* — relatorio completo da semana\n" +
+      "*Comandos — HairTech*\n\n" +
+      "Você pode escrever em linguagem natural ou usar os atalhos:\n\n" +
+      "*/status* — resumo das conversas\n" +
+      "*/relatorio* — relatório da semana\n" +
+      "*/fimdesemana [msg]* — retomar quem mandou no fim de semana\n" +
       "*/todos [msg]* — enviar para todos os ativos\n" +
       "*/quentes [msg]* — enviar para leads quentes\n" +
       "*/mornos [msg]* — enviar para leads mornos\n" +
-      "*/semresposta [msg]* — enviar para quem nao respondeu\n" +
-      "*/inativos [msg]* — enviar para inativos ha +48h\n" +
-      "*/msg [numero] [texto]* — enviar para um paciente\n" +
-      "*/pausar [numero]* — pausar bot para um numero\n" +
-      "*/retomar [numero]* — retomar bot para um numero\n\n" +
-      "Exemplo: /quentes Ola! Temos uma condicao especial esta semana."
+      "*/semresposta [msg]* — quem ainda nao respondeu\n" +
+      "*/inativos [msg]* — inativos ha mais de 48h\n" +
+      "*/msg [numero] [texto]* — mensagem direta\n" +
+      "*/pausar [numero]* — pausar bot\n" +
+      "*/retomar [numero]* — retomar bot\n\n" +
+      "Ou fale naturalmente:\n" +
+      "_Mande uma mensagem pros leads quentes sobre a promocao de hoje_\n" +
+      "_Quantos leads temos agora?_\n" +
+      "_Retoma quem mandou no final de semana_"
     );
   }
 
@@ -138,7 +143,7 @@ async function processarComando(texto) {
     if (!numero || !mensagem) return responder("Uso: /msg [número] [texto]");
     await enviarMensagem(numero, mensagem);
     if (conversas[numero]) {
-      conversas[numero].historico.push({ role: "assistant", content: mensagem });
+      conversas[numero].historico.push({ role: "assistant", content: mensagem, ts: Date.now() });
       db.salvarConversa(numero, conversas[numero]).catch(() => {});
     }
     return responder(`Mensagem enviada para +${numero}.`);
@@ -153,7 +158,7 @@ async function processarComando(texto) {
     for (const [numero, c] of alvos) {
       try {
         await enviarMensagem(numero, mensagem);
-        c.historico.push({ role: "assistant", content: mensagem });
+        c.historico.push({ role: "assistant", content: mensagem, ts: Date.now() });
         db.salvarConversa(numero, c).catch(() => {});
         enviados++;
         await new Promise(r => setTimeout(r, 800));
@@ -164,40 +169,150 @@ async function processarComando(texto) {
 
   // /todos [msg]
   if (lower.startsWith("/todos ")) {
-    const msg = t.substring(7).trim();
-    return enviarEmMassa(c => c.status === "ativo", msg);
+    return enviarEmMassa(c => c.status === "ativo", t.substring(7).trim());
   }
 
   // /quentes [msg]
   if (lower.startsWith("/quentes ")) {
-    const msg = t.substring(9).trim();
-    return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "quente", msg);
+    return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "quente", t.substring(9).trim());
   }
 
   // /mornos [msg]
   if (lower.startsWith("/mornos ")) {
-    const msg = t.substring(8).trim();
-    return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "morno", msg);
+    return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "morno", t.substring(8).trim());
   }
 
-  // /semresposta [msg] — bot enviou último, paciente não respondeu
+  // /semresposta [msg]
   if (lower.startsWith("/semresposta ")) {
-    const msg = t.substring(13).trim();
     return enviarEmMassa(c => {
       const h = c.historico || [];
       return c.status === "ativo" && h.length > 0 && h[h.length - 1].role === "assistant";
-    }, msg);
+    }, t.substring(13).trim());
   }
 
-  // /inativos [msg] — sem atividade há mais de 48h
+  // /inativos [msg]
   if (lower.startsWith("/inativos ")) {
-    const msg = t.substring(10).trim();
     const limite = Date.now() - 48 * 60 * 60 * 1000;
-    return enviarEmMassa(c => c.status === "ativo" && c.ultimaAtividade < limite, msg);
+    return enviarEmMassa(c => c.status === "ativo" && c.ultimaAtividade < limite, t.substring(10).trim());
   }
 
-  // Comando não reconhecido
-  return responder(`Comando nao reconhecido. Envie */ajuda* para ver os comandos disponíveis.`);
+  // /fimdesemana [msg opcional] — retoma quem mandou sab/dom
+  if (lower.startsWith("/fimdesemana") || /(fim de semana|final de semana|fim-de-semana)/.test(lower)) {
+    const msgExtra = lower.startsWith("/fimdesemana") ? t.substring(13).trim() : "";
+    const msgRetomada = msgExtra ||
+      "Bom dia! Obrigado pela sua mensagem. Estamos retomando seu atendimento agora e ficamos à disposição para te ajudar da melhor forma.";
+
+    // Identifica sábado e domingo anteriores
+    const agora = new Date();
+    const dia = agora.getDay();
+    const diasAteSab = dia === 0 ? 1 : dia === 6 ? 0 : dia + 1;
+    const sabado = new Date(agora); sabado.setDate(sabado.getDate() - diasAteSab); sabado.setHours(0,0,0,0);
+    const domingo = new Date(sabado); domingo.setDate(domingo.getDate() + 1); domingo.setHours(23,59,59,999);
+
+    const alvos = Object.entries(conversas).filter(([, c]) => {
+      return c.status === "ativo" &&
+             c.ultimaAtividade >= sabado.getTime() &&
+             c.ultimaAtividade <= domingo.getTime();
+    });
+
+    if (alvos.length === 0) return responder("Nenhum lead com mensagem no fim de semana.");
+
+    await responder(`Retomando ${alvos.length} paciente(s) do fim de semana...`);
+    let enviados = 0;
+    for (const [numero, c] of alvos) {
+      try {
+        await enviarMensagem(numero, msgRetomada);
+        c.historico.push({ role: "assistant", content: msgRetomada, ts: Date.now() });
+        c.ultimaAtividade = Date.now();
+        db.salvarConversa(numero, c).catch(() => {});
+        enviados++;
+        await new Promise(r => setTimeout(r, 1000));
+      } catch (_) {}
+    }
+    return responder(`Retomada concluída. ${enviados} paciente(s) notificado(s).`);
+  }
+
+  // ── LINGUAGEM NATURAL ──────────────────────────────────────────
+  // Qualquer mensagem que não bateu nos comandos acima entra aqui
+  try {
+    const snap = {
+      total: Object.keys(conversas).length,
+      ativos: Object.values(conversas).filter(c => c.status === "ativo").length,
+      quentes: Object.values(conversas).filter(c => c.temperatura === "quente").length,
+      mornos: Object.values(conversas).filter(c => c.temperatura === "morno").length,
+      humanos: Object.values(conversas).filter(c => c.status === "humano").length,
+    };
+
+    const resp = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+      model: "openai/gpt-4o-mini",
+      messages: [{
+        role: "user",
+        content: `Você interpreta comandos do Dr. Ricardo para o sistema da Clínica HairTech via WhatsApp.
+Estado atual: ${JSON.stringify(snap)}
+
+Mensagem do Dr. Ricardo: "${t}"
+
+Responda APENAS com JSON válido (sem markdown):
+{
+  "acao": "fimdesemana|todos|quentes|mornos|semresposta|inativos|status|nao_entendido",
+  "mensagem": "texto para enviar aos pacientes (se aplicável, nunca peça desculpas, voz profissional da clínica)",
+  "resposta": "o que dizer ao Dr. Ricardo sobre o que você vai fazer"
+}
+
+Regras de mapeamento:
+- fim/final de semana, sab/dom → fimdesemana
+- leads quentes, quem está interessado → quentes
+- leads mornos → mornos
+- sem resposta, não responderam → semresposta
+- inativos, sumidos → inativos
+- todos, todo mundo → todos
+- quantos leads, status, resumo → status (sem mensagem)
+- se não entender → nao_entendido`
+      }],
+      max_tokens: 300,
+      temperature: 0.2
+    }, {
+      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
+      timeout: 15000
+    });
+
+    const raw = resp.data.choices[0].message.content;
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("no json");
+    const cmd = JSON.parse(match[0]);
+
+    if (cmd.resposta) await responder(cmd.resposta);
+
+    if (cmd.acao === "status") {
+      return responder(
+        `*Status HairTech*\nTotal: ${snap.total} | Ativos: ${snap.ativos} | Quentes: ${snap.quentes} | Mornos: ${snap.mornos} | Humano: ${snap.humanos}`
+      );
+    }
+    if (cmd.mensagem) {
+      const limite48 = Date.now() - 48 * 60 * 60 * 1000;
+      const filtros = {
+        todos:       c => c.status === "ativo",
+        quentes:     c => c.status === "ativo" && c.temperatura === "quente",
+        mornos:      c => c.status === "ativo" && c.temperatura === "morno",
+        semresposta: c => { const h = c.historico||[]; return c.status==="ativo" && h.length>0 && h[h.length-1].role==="assistant"; },
+        inativos:    c => c.status === "ativo" && c.ultimaAtividade < limite48,
+        fimdesemana: c => {
+          const agora2 = new Date(); const dia2 = agora2.getDay();
+          const diasAteSab2 = dia2===0?1:dia2===6?0:dia2+1;
+          const sab2 = new Date(agora2); sab2.setDate(sab2.getDate()-diasAteSab2); sab2.setHours(0,0,0,0);
+          const dom2 = new Date(sab2); dom2.setDate(dom2.getDate()+1); dom2.setHours(23,59,59,999);
+          return c.status==="ativo" && c.ultimaAtividade>=sab2.getTime() && c.ultimaAtividade<=dom2.getTime();
+        }
+      };
+      const filtro = filtros[cmd.acao];
+      if (filtro) return enviarEmMassa(filtro, cmd.mensagem);
+    }
+  } catch (e) {
+    console.error("Erro ao interpretar comando natural:", e.message);
+  }
+
+  return responder("Nao entendi. Envie *ajuda* para ver o que posso fazer por você.");
+}
 }
 
 // ==========================
