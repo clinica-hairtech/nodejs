@@ -837,6 +837,63 @@ app.post("/consulta", async (req, res) => {
   res.json({ ok: true, id });
 });
 
+// ==========================
+// DIAGNÓSTICO
+// ==========================
+app.get("/diagnostico", async (req, res) => {
+  if (req.query.senha !== ADMIN_PASS) return res.status(401).json({ erro: "Não autorizado" });
+
+  const resultado = {
+    variaveis: {
+      WHATSAPP_TOKEN: WHATSAPP_TOKEN ? WHATSAPP_TOKEN.substring(0, 20) + "..." : "NÃO DEFINIDO",
+      PHONE_NUMBER_ID: PHONE_NUMBER_ID || "NÃO DEFINIDO",
+      VERIFY_TOKEN: VERIFY_TOKEN || "NÃO DEFINIDO",
+      OPENROUTER_API_KEY: OPENROUTER_API_KEY ? OPENROUTER_API_KEY.substring(0, 15) + "..." : "NÃO DEFINIDO",
+      AI_MODEL,
+      NOTIFY_PHONE
+    },
+    testes: {}
+  };
+
+  // Testa token WhatsApp
+  try {
+    const r = await axios.get(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}`,
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 8000 }
+    );
+    resultado.testes.whatsapp_token = { ok: true, numero: r.data.display_phone_number, nome: r.data.verified_name };
+  } catch (e) {
+    resultado.testes.whatsapp_token = { ok: false, erro: e.response?.data?.error?.message || e.message };
+  }
+
+  // Testa OpenRouter
+  try {
+    const r = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      { model: AI_MODEL, messages: [{ role: "user", content: "oi" }], max_tokens: 5 },
+      { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 }
+    );
+    resultado.testes.openrouter = { ok: true, modelo: r.data.model };
+  } catch (e) {
+    resultado.testes.openrouter = { ok: false, erro: e.response?.data?.error?.message || e.message };
+  }
+
+  // Testa banco de dados
+  try {
+    if (db.pool) {
+      await db.pool.query("SELECT 1");
+      resultado.testes.banco = { ok: true, conversas: Object.keys(conversas).length };
+    } else {
+      resultado.testes.banco = { ok: false, erro: "DATABASE_URL não configurado" };
+    }
+  } catch (e) {
+    resultado.testes.banco = { ok: false, erro: e.message };
+  }
+
+  const tudo_ok = Object.values(resultado.testes).every(t => t.ok);
+  res.json({ ...resultado, status: tudo_ok ? "TUDO OK" : "PROBLEMAS ENCONTRADOS" });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`HairTech Bot v3.0 rodando na porta ${PORT}`);
