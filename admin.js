@@ -140,7 +140,7 @@ module.exports = function(conversas, enviarMensagem) {
   });
 
   // ===== CONVERSA INDIVIDUAL =====
-  router.get("/conversa/:numero", autenticar, (req, res) => {
+  router.get("/conversa/:numero", autenticar, async (req, res) => {
     const { numero } = req.params;
     const senha = req.query.senha;
     const c = conversas[numero];
@@ -148,7 +148,20 @@ module.exports = function(conversas, enviarMensagem) {
     if (!c) return res.redirect(`/admin?senha=${senha}`);
 
     const temp  = c.temperatura || "frio";
-    const hist  = c.historico || [];
+
+    // Carrega histórico completo do banco (mais confiável que a memória)
+    let hist = c.historico || [];
+    try {
+      if (db.pool) {
+        const result = await db.pool.query(
+          `SELECT role, content, created_at FROM mensagens WHERE numero=$1 ORDER BY created_at ASC LIMIT 200`,
+          [numero]
+        );
+        if (result.rows.length > 0) {
+          hist = result.rows.map(r => ({ role: r.role, content: r.content, ts: new Date(r.created_at).getTime() }));
+        }
+      }
+    } catch (_) {}
 
     const msgs = hist.map(m => {
       const isBot = m.role === "assistant";
@@ -163,10 +176,11 @@ module.exports = function(conversas, enviarMensagem) {
         .replace(/\[HUMANO\]/g, "")
         .trim();
       if (!content) return "";
+      const hora = m.ts ? new Date(m.ts).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit", timeZone:"America/Sao_Paulo" }) : "";
       return `
-        <div style="display:flex;justify-content:${isBot ? 'flex-start' : 'flex-end'};margin-bottom:10px">
-          <div style="max-width:75%;background:${isBot ? '#1e1e2e' : '#4c1d95'};padding:10px 14px;border-radius:12px;font-size:13px;white-space:pre-wrap;line-height:1.5">
-            <small style="color:${isBot ? '#6b7280' : '#c4b5fd'};font-size:10px;display:block;margin-bottom:4px">${isBot ? 'BOT' : 'PACIENTE'}</small>
+        <div style="display:flex;justify-content:${isBot ? 'flex-start' : 'flex-end'};margin-bottom:12px">
+          <div style="max-width:75%;background:${isBot ? '#1a3a4a' : '#4c1d95'};padding:10px 14px;border-radius:12px;font-size:13px;white-space:pre-wrap;line-height:1.5;border:1px solid ${isBot ? '#2a5a70' : '#6d28d9'}">
+            <small style="color:${isBot ? '#60a5fa' : '#c4b5fd'};font-size:10px;display:block;margin-bottom:4px;font-weight:bold">${isBot ? 'BOT' : 'PACIENTE'}${hora ? ' · '+hora : ''}</small>
             ${content}
           </div>
         </div>`;
