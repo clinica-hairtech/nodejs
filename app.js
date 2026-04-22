@@ -313,7 +313,6 @@ Regras de mapeamento:
 
   return responder("Nao entendi. Envie *ajuda* para ver o que posso fazer por você.");
 }
-}
 
 // ==========================
 // CLASSIFICAÇÃO DE LEAD
