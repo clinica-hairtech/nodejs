@@ -69,7 +69,7 @@ async function gerarRelatorio(conversas) {
     `${linha("Total convertidos", metricasBanco.convertidos)}\n` +
     `${linha("Total transplante", metricasBanco.transplantes)}\n`
     : "") +
-    `\n_Painel completo: nodejs-production-843d.up.railway.app/admin_`;
+    `\n_Painel completo: hairtech.org/admin_`;
 
   return texto;
 }
