@@ -634,7 +634,7 @@ async function chamarIA(model, historico) {
 async function obterRespostaIA(numero, mensagem) {
   const c = conversas[numero];
   c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
-  if (c.historico.length > 20) c.historico = c.historico.slice(-20);
+  if (c.historico.length > 10) c.historico = c.historico.slice(-10);
 
   // Tenta GPT-4o-mini primeiro, cai para Claude Haiku se falhar
   try {
