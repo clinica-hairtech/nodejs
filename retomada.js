@@ -1,3 +1,5 @@
+const db = require("./db");
+
 const TEXTOS = {
   novo: [
     "Só passando para saber se ainda posso te ajudar com sua dúvida ou te orientar melhor sobre como funciona o atendimento aqui na clínica.",
@@ -72,6 +74,8 @@ module.exports = function iniciarRetomada(conversas, enviarMensagem) {
         await enviarMensagem(numero, texto);
         c.retomadas = (c.retomadas || 0) + 1;
         agendarProximaRetomada(c);
+        db.salvarMensagem(numero, "assistant", texto).catch(() => {});
+        db.salvarConversa(numero, c).catch(() => {});
         console.log(`Retomada ${c.retomadas} enviada para ${numero}`);
       } catch (e) {
         console.error(`Erro ao enviar retomada para ${numero}:`, e.message);
