@@ -543,13 +543,31 @@ async function analisarImagem(imageId) {
 // ==========================
 async function processarResposta(from, resposta) {
   if (resposta.includes("[BOTAO_ESPECIALISTA]")) {
-    const antes = resposta.split("[BOTAO_ESPECIALISTA]")[0].trim();
+    const antesRaw = resposta.split("[BOTAO_ESPECIALISTA]")[0];
+    const antes = antesRaw
+      .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
+      .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
+      .replace(/\[PDF_FOTOS_M\]/g, "")
+      .replace(/\[PDF_FOTOS_F\]/g, "")
+      .replace(/\[PDF_FOTOS\]/g, "")
+      .replace(/\[HUMANO\]/g, "")
+      .trim();
+
     if (antes) await enviarMensagem(from, antes);
+
+    // Garante que a chave Pix seja sempre enviada antes do botão
+    if (!antes.includes("49634881000191")) {
+      await new Promise(r => setTimeout(r, 400));
+      await enviarMensagem(from,
+        "Para garantir a sua vaga, é necessário um sinal de R$150.\n\nChave Pix (CNPJ):\n49634881000191\n\nApós pagar, envie o comprovante pelo link abaixo:"
+      );
+    }
+
     await new Promise(r => setTimeout(r, 500));
     await enviarBotaoEspecialista(from);
     await new Promise(r => setTimeout(r, 2000));
     await enviarMensagem(from, "Um detalhe importante: para garantir a melhor análise na tricoscopia, pedimos que evite lavar o cabelo nas 24 a 48 horas antes da consulta.");
-    await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix");
+    await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix de R$150 (CNPJ: 49634881000191). Não confirmar agendamento sem comprovante.");
     conversas[from].status = "humano";
     conversas[from].proximaRetomada = null;
     // Vídeo HeyGen apenas para transplante (maior valor — economiza créditos)
@@ -568,7 +586,7 @@ async function processarResposta(from, resposta) {
   }
 
   if (resposta.includes("[NOTIF_AGENDAMENTO]")) {
-    await notificarClinica(from, "Paciente confirmou interesse em agendar consulta — aguardando Pix");
+    await notificarClinica(from, "Paciente confirmou interesse em agendar consulta — aguardando Pix R$150 (CNPJ: 49634881000191). Não agendar sem comprovante.");
   }
   if (resposta.includes("[NOTIF_TRANSPLANTE]")) {
     await notificarClinica(from, "Paciente com interesse em transplante capilar");
@@ -634,7 +652,7 @@ async function chamarIA(model, historico) {
 async function obterRespostaIA(numero, mensagem) {
   const c = conversas[numero];
   c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
-  if (c.historico.length > 10) c.historico = c.historico.slice(-10);
+  if (c.historico.length > 20) c.historico = c.historico.slice(-20);
 
   // Tenta GPT-4o-mini primeiro, cai para Claude Haiku se falhar
   try {
