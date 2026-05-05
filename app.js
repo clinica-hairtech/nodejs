@@ -6,6 +6,8 @@ const adminRouter = require("./admin");
 const lembretes = require("./lembretes");
 const db = require("./db");
 const iniciarRelatorio = require("./relatorio");
+const iniciarResgate = require("./resgate");
+const { getSugestao } = require("./resgate");
 const { enviarVideoPersonalizado } = require("./heygen");
 const { formatarMensagemAgenda } = require("./calendar");
 const criarRoterNfse = require("./nfse");
@@ -37,6 +39,7 @@ db.init().then(async (ok) => {
   iniciarRetomada(conversas, enviarMensagem);
   lembretes.iniciar(enviarMensagem);
   iniciarRelatorio(conversas, enviarMensagem, OWNER_PHONE);
+  iniciarResgate(conversas, enviarMensagem, OWNER_PHONE);
 });
 
 // Sincroniza conversas com banco a cada 2 minutos
@@ -71,6 +74,9 @@ async function processarComando(texto) {
       "*/msg [numero] [texto]* — mensagem direta\n" +
       "*/pausar [numero]* — pausar bot\n" +
       "*/retomar [numero]* — retomar bot\n\n" +
+      "*Resgate diario (todo dia 10h voce recebe automaticamente):*\n" +
+      "*aprovar [numero]* — envia a sugestao gerada para o lead\n" +
+      "*enviar [numero] [mensagem]* — envia mensagem personalizada\n\n" +
       "Ou fale naturalmente:\n" +
       "_Mande uma mensagem pros leads quentes sobre a promocao de hoje_\n" +
       "_Quantos leads temos agora?_\n" +
@@ -144,6 +150,35 @@ async function processarComando(texto) {
     await enviarMensagem(numero, mensagem);
     if (conversas[numero]) {
       conversas[numero].historico.push({ role: "assistant", content: mensagem, ts: Date.now() });
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+    }
+    return responder(`Mensagem enviada para +${numero}.`);
+  }
+
+  // aprovar [número] — envia a sugestão gerada pelo resgate diário
+  if (lower.startsWith("aprovar ")) {
+    const numero = t.substring(8).trim().replace(/\D/g, "");
+    const sugestao = getSugestao(numero);
+    if (!sugestao) return responder(`Nenhuma sugestão pendente para +${numero}. Use: enviar ${numero} [mensagem]`);
+    await enviarMensagem(numero, sugestao);
+    if (conversas[numero]) {
+      conversas[numero].historico.push({ role: "assistant", content: sugestao, ts: Date.now() });
+      conversas[numero].ultimaAtividade = Date.now();
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+    }
+    return responder(`Sugestão enviada para +${numero}.`);
+  }
+
+  // enviar [número] [mensagem] — envia mensagem personalizada para lead
+  if (lower.startsWith("enviar ")) {
+    const partes = t.substring(7).trim().split(" ");
+    const numero = partes[0].replace(/\D/g, "");
+    const mensagem = partes.slice(1).join(" ");
+    if (!numero || !mensagem) return responder("Uso: enviar [número] [mensagem]\nOu: aprovar [número] para enviar a sugestão.");
+    await enviarMensagem(numero, mensagem);
+    if (conversas[numero]) {
+      conversas[numero].historico.push({ role: "assistant", content: mensagem, ts: Date.now() });
+      conversas[numero].ultimaAtividade = Date.now();
       db.salvarConversa(numero, conversas[numero]).catch(() => {});
     }
     return responder(`Mensagem enviada para +${numero}.`);
