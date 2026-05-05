@@ -17,18 +17,17 @@ const TEXTOS = {
   ]
 };
 
-// Intervalos em ms: 5min, 30min, 2h, 24h, 72h (3 dias) → encerra
+// Intervalos em ms: 10min, 2h, 24h, 72h (3 dias) → encerra
 const INTERVALOS_NOVO = [
-  5  * 60 * 1000,
-  30 * 60 * 1000,
+  10 * 60 * 1000,
   2  * 60 * 60 * 1000,
   24 * 60 * 60 * 1000,
   72 * 60 * 60 * 1000
 ];
 
-// Paciente antigo: 30min, 2h, 24h, 72h
+// Paciente antigo: mesma régua
 const INTERVALOS_ANTIGO = [
-  30 * 60 * 1000,
+  10 * 60 * 1000,
   2  * 60 * 60 * 1000,
   24 * 60 * 60 * 1000,
   72 * 60 * 60 * 1000
@@ -36,11 +35,12 @@ const INTERVALOS_ANTIGO = [
 
 function dentroDoHorario() {
   const agora = new Date();
-  const dia = agora.getDay(); // 0=dom, 6=sab
-  const hora = agora.getHours();
-  if (dia === 0) return false; // domingo
-  if (dia === 6) return hora >= 10 && hora < 13; // sábado
-  return hora >= 9 && hora < 19; // seg-sex
+  const brasilia = new Date(agora.getTime() - 3 * 60 * 60 * 1000);
+  const dia  = brasilia.getUTCDay();
+  const hora = brasilia.getUTCHours();
+  if (dia === 0) return false;                    // domingo: nunca
+  if (dia === 6) return hora >= 10 && hora < 13; // sábado: 10h-13h
+  return hora >= 9 && hora < 22;                 // seg-sex: 9h-22h (evita madrugada)
 }
 
 function agendarProximaRetomada(conversa) {
