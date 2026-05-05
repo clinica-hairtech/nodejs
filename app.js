@@ -37,6 +37,7 @@ db.init().then(async (ok) => {
   }
   // Inicia sistemas automáticos após carregar conversas
   iniciarRetomada(conversas, enviarMensagem);
+  iniciarRetomada.iniciarChamada20h(conversas, enviarMensagem);
   lembretes.iniciar(enviarMensagem);
   iniciarRelatorio(conversas, enviarMensagem, OWNER_PHONE);
   iniciarResgate(conversas, enviarMensagem, OWNER_PHONE);
