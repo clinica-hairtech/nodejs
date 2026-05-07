@@ -66,6 +66,7 @@ async function processarComando(texto) {
       "Você pode escrever em linguagem natural ou usar os atalhos:\n\n" +
       "*/status* — resumo das conversas\n" +
       "*/relatorio* — relatório da semana\n" +
+      "*/listar [todos|quentes|mornos|inativos|semresposta]* — ver lista de contatos\n" +
       "*/fimdesemana [msg]* — retomar quem mandou no fim de semana\n" +
       "*/todos [msg]* — enviar para todos os ativos\n" +
       "*/quentes [msg]* — enviar para leads quentes\n" +
@@ -232,6 +233,29 @@ async function processarComando(texto) {
     return enviarEmMassa(c => c.status === "ativo" && c.ultimaAtividade < limite, t.substring(10).trim());
   }
 
+  // /listar [grupo] — exibe lista de contatos sem enviar nada
+  if (lower.startsWith("/listar") || lower === "listar" || /^listar\s/.test(lower)) {
+    const partes = t.split(/\s+/);
+    const grupo = (partes[1] || "todos").toLowerCase();
+    const limite48 = Date.now() - 48 * 60 * 60 * 1000;
+    const filtros2 = {
+      todos:       ([, cv]) => true,
+      quentes:     ([, cv]) => cv.temperatura === "quente",
+      mornos:      ([, cv]) => cv.temperatura === "morno",
+      inativos:    ([, cv]) => cv.status === "ativo" && cv.ultimaAtividade < limite48,
+      semresposta: ([, cv]) => { const h = cv.historico||[]; return cv.status==="ativo" && h.length>0 && h[h.length-1].role==="assistant"; },
+    };
+    const fn = filtros2[grupo] || filtros2.todos;
+    const alvos = Object.entries(conversas).filter(fn);
+    if (alvos.length === 0) return responder(`Nenhum contato em "${grupo}".`);
+    const lista = alvos.map(([num, cv], i) => {
+      const h = cv.historico || [];
+      const ultima = h.length ? h[h.length - 1].content.substring(0, 50) : "-";
+      return `${i+1}. +${num} | ${cv.temperatura||"frio"} | ${cv.status}\nÚltima: ${ultima}`;
+    }).join("\n\n");
+    return responder(`*Contatos — ${grupo}* (${alvos.length})\n\n${lista}`);
+  }
+
   // /fimdesemana [msg opcional] — retoma quem mandou sab/dom
   if (lower.startsWith("/fimdesemana") || /(fim de semana|final de semana|fim-de-semana)/.test(lower)) {
     const msgExtra = lower.startsWith("/fimdesemana") ? t.substring(13).trim() : "";
@@ -290,20 +314,19 @@ Mensagem do Dr. Ricardo: "${t}"
 
 Responda APENAS com JSON válido (sem markdown):
 {
-  "acao": "fimdesemana|todos|quentes|mornos|semresposta|inativos|status|nao_entendido",
-  "mensagem": "texto para enviar aos pacientes (se aplicável, nunca peça desculpas, voz profissional da clínica)",
+  "acao": "fimdesemana|todos|quentes|mornos|semresposta|inativos|status|listar|nao_entendido",
+  "grupo": "todos|quentes|mornos|semresposta|inativos (apenas quando acao=listar)",
+  "mensagem": "texto para enviar aos pacientes (SOMENTE se Dr. Ricardo pediu explicitamente para ENVIAR ou MANDAR uma mensagem)",
   "resposta": "o que dizer ao Dr. Ricardo sobre o que você vai fazer"
 }
 
 Regras de mapeamento:
-- fim/final de semana, sab/dom → fimdesemana
-- leads quentes, quem está interessado → quentes
-- leads mornos → mornos
-- sem resposta, não responderam → semresposta
-- inativos, sumidos → inativos
-- todos, todo mundo → todos
+- ENVIAR mensagem para leads: fim/final de semana → fimdesemana, quentes → quentes, mornos → mornos, sem resposta → semresposta, inativos → inativos, todos → todos
+- VER/LISTAR contatos (SEM enviar): lista, ver contatos, me mostra, quem são, contatos, quero ver → listar
 - quantos leads, status, resumo → status (sem mensagem)
-- se não entender → nao_entendido`
+- se não entender → nao_entendido
+
+REGRA CRÍTICA: só defina "mensagem" se Dr. Ricardo disse explicitamente "manda", "envia", "avisa" ou "mande uma mensagem". Se ele quer VER ou LISTAR contatos, use acao=listar sem mensagem. NUNCA envie mensagens para pacientes sem ordem explícita.`
       }],
       max_tokens: 300,
       temperature: 0.2
@@ -323,6 +346,26 @@ Regras de mapeamento:
       return responder(
         `*Status HairTech*\nTotal: ${snap.total} | Ativos: ${snap.ativos} | Quentes: ${snap.quentes} | Mornos: ${snap.mornos} | Humano: ${snap.humanos}`
       );
+    }
+    if (cmd.acao === "listar") {
+      const grupo = (cmd.grupo || "todos").toLowerCase();
+      const limite48nl = Date.now() - 48 * 60 * 60 * 1000;
+      const filtrosLista = {
+        todos:       ([, cv]) => true,
+        quentes:     ([, cv]) => cv.temperatura === "quente",
+        mornos:      ([, cv]) => cv.temperatura === "morno",
+        inativos:    ([, cv]) => cv.status === "ativo" && cv.ultimaAtividade < limite48nl,
+        semresposta: ([, cv]) => { const h = cv.historico||[]; return cv.status==="ativo" && h.length>0 && h[h.length-1].role==="assistant"; },
+      };
+      const fnLista = filtrosLista[grupo] || filtrosLista.todos;
+      const alvosLista = Object.entries(conversas).filter(fnLista);
+      if (alvosLista.length === 0) return responder(`Nenhum contato em "${grupo}".`);
+      const listaTexto = alvosLista.map(([num, cv], i) => {
+        const h = cv.historico || [];
+        const ultima = h.length ? h[h.length - 1].content.substring(0, 50) : "-";
+        return `${i+1}. +${num} | ${cv.temperatura||"frio"} | ${cv.status}\nÚltima: ${ultima}`;
+      }).join("\n\n");
+      return responder(`*Contatos — ${grupo}* (${alvosLista.length})\n\n${listaTexto}`);
     }
     if (cmd.mensagem) {
       const limite48 = Date.now() - 48 * 60 * 60 * 1000;
