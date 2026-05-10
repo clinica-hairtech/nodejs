@@ -16,6 +16,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.av.rule=Host(`hairtech.org`) && PathPrefix(`/webhook`,`/health`,`/comprovantes`,`/historico`,`/admin`,`/status`,`/nfse`)"
       - "traefik.http.services.av.loadbalancer.server.port=3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
       interval: 30s

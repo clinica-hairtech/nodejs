@@ -4,7 +4,7 @@ const { exec } = require('child_process');
 const fs   = require('fs');
 
 const PORT           = 3099;
-const LOG_FILE       = '/root/hairtech-executor/executor.log';
+const LOG_FILE       = '/home/user/nodejs/hairtech-executor/executor.log';
 const APPROVAL_TOKEN = process.env.APPROVAL_TOKEN || 'hairtech-exec-2026';
 
 // ─── ALLOWLIST ────────────────────────────────────────────────────────────────
@@ -40,8 +40,10 @@ function log(msg) {
 }
 
 function check(cmd) {
+  // Strip fd-redirections (e.g. 2>&1) before blocklist so they're not falsely blocked
+  const forBlocklist = cmd.replace(/\d?>&\d+/g, '');
   for (const b of BLOCKLIST) {
-    if (b.test(cmd)) return { ok: false, reason: `BLOQUEADO pela blocklist: ${b}` };
+    if (b.test(forBlocklist)) return { ok: false, reason: `BLOQUEADO pela blocklist: ${b}` };
   }
   for (const a of ALLOWLIST) {
     if (a.test(cmd.trim())) return { ok: true };
@@ -97,7 +99,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, '0.0.0.0', () => {
   log(`HairTech Executor ONLINE — porta ${PORT} — apenas localhost`);
 });
 

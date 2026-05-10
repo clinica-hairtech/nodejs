@@ -6,13 +6,13 @@ Requires=docker.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/hairtech-executor
-ExecStart=/usr/bin/node /root/hairtech-executor/server.js
+WorkingDirectory=/home/user/nodejs/hairtech-executor
+ExecStart=/usr/bin/node /home/user/nodejs/hairtech-executor/server.js
 Restart=always
 RestartSec=5
 Environment=APPROVAL_TOKEN=hairtech-exec-2026
-StandardOutput=append:/root/hairtech-executor/executor.log
-StandardError=append:/root/hairtech-executor/executor.log
+StandardOutput=append:/home/user/nodejs/hairtech-executor/executor.log
+StandardError=append:/home/user/nodejs/hairtech-executor/executor.log
 
 [Install]
 WantedBy=multi-user.target

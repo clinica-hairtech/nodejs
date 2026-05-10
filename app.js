@@ -76,7 +76,8 @@ async function processarComando(texto) {
       "*/inativos [msg]* — inativos ha mais de 48h\n" +
       "*/msg [numero] [texto]* — mensagem direta\n" +
       "*/pausar [numero]* — pausar bot\n" +
-      "*/retomar [numero]* — retomar bot\n\n" +
+      "*/retomar [numero]* — retomar bot\n" +
+      "*!exec [comando]* — executa comando no servidor\n\n" +
       "*Resgate diario (todo dia 10h voce recebe automaticamente):*\n" +
       "*aprovar [numero]* — envia a sugestao gerada para o lead\n" +
       "*enviar [numero] [mensagem]* — envia mensagem personalizada\n\n" +
@@ -291,6 +292,27 @@ async function processarComando(texto) {
       } catch (_) {}
     }
     return responder(`Retomada concluída. ${enviados} paciente(s) notificado(s).`);
+  }
+
+  // !exec <comando> — executa via hairtech-executor no host
+  if (lower.startsWith("!exec ")) {
+    const cmd = t.substring(6).trim();
+    if (!cmd) return responder("Uso: !exec <comando>");
+    try {
+      const res = await axios.post("http://host.docker.internal:3099/run", { command: cmd }, {
+        headers: {
+          "x-approval-token": process.env.EXECUTOR_TOKEN || "hairtech-exec-2026",
+          "Content-Type": "application/json"
+        },
+        timeout: 35000
+      });
+      const d = res.data;
+      const out = (d.output || "(sem output)").substring(0, 3000);
+      return responder(`*Executor: ${d.status}*\n${out}`);
+    } catch (e) {
+      const msg = e.response?.data?.error || e.message;
+      return responder(`*Executor: ERRO*\n${msg}`);
+    }
   }
 
   // ── LINGUAGEM NATURAL ──────────────────────────────────────────
