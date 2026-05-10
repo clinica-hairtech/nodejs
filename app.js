@@ -19,8 +19,9 @@ app.use(express.urlencoded({ extended: true }));
 const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const AI_MODEL         = "openai/gpt-4o-mini";
+const GEMINI_API_KEY   = process.env.GEMINI_API_KEY;
+const AI_MODEL         = "gemini-2.0-flash";
+const AI_BASE_URL      = "https://generativelanguage.googleapis.com/v1beta/openai";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
@@ -303,8 +304,8 @@ async function processarComando(texto) {
       humanos: Object.values(conversas).filter(c => c.status === "humano").length,
     };
 
-    const resp = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
-      model: "openai/gpt-4o-mini",
+    const resp = await axios.post(`${AI_BASE_URL}/chat/completions`, {
+      model: AI_MODEL,
       messages: [{
         role: "user",
         content: `Você interpreta comandos do Dr. Ricardo para o sistema da Clínica HairTech via WhatsApp.
@@ -331,7 +332,7 @@ REGRA CRÍTICA: só defina "mensagem" se Dr. Ricardo disse explicitamente "manda
       max_tokens: 300,
       temperature: 0.2
     }, {
-      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
       timeout: 15000
     });
 
@@ -579,9 +580,9 @@ async function analisarImagem(imageId) {
 
     // 3. Envia para visão IA
     const resp = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
+      `${AI_BASE_URL}/chat/completions`,
       {
-        model: "openai/gpt-4o-mini",
+        model: AI_MODEL,
         messages: [{
           role: "user",
           content: [
@@ -599,7 +600,7 @@ async function analisarImagem(imageId) {
       },
       {
         headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          Authorization: `Bearer ${GEMINI_API_KEY}`,
           "Content-Type": "application/json"
         },
         timeout: 20000
@@ -707,7 +708,7 @@ async function processarResposta(from, resposta) {
 // ==========================
 async function chamarIA(model, historico) {
   const resp = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
+    `${AI_BASE_URL}/chat/completions`,
     {
       model,
       messages: [
@@ -719,7 +720,7 @@ async function chamarIA(model, historico) {
     },
     {
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json"
       },
       timeout: 25000
@@ -739,13 +740,13 @@ async function obterRespostaIA(numero, mensagem) {
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
     return aiResp;
   } catch (e) {
-    console.warn("GPT falhou, tentando Claude Haiku:", e.message);
+    console.warn("Gemini 2.0 falhou, tentando Gemini 1.5:", e.message);
   }
 
   try {
-    const aiResp = await chamarIA("anthropic/claude-haiku-4-5", c.historico);
+    const aiResp = await chamarIA("gemini-1.5-flash", c.historico);
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
-    console.log("Resposta via Claude Haiku (fallback)");
+    console.log("Resposta via Gemini 1.5 (fallback)");
     return aiResp;
   } catch (e) {
     console.error("Fallback também falhou:", e.response?.data || e.message);
@@ -1059,7 +1060,7 @@ app.get("/diagnostico", async (req, res) => {
       WHATSAPP_TOKEN: WHATSAPP_TOKEN ? WHATSAPP_TOKEN.substring(0, 20) + "..." : "NÃO DEFINIDO",
       PHONE_NUMBER_ID: PHONE_NUMBER_ID || "NÃO DEFINIDO",
       VERIFY_TOKEN: VERIFY_TOKEN || "NÃO DEFINIDO",
-      OPENROUTER_API_KEY: OPENROUTER_API_KEY ? OPENROUTER_API_KEY.substring(0, 15) + "..." : "NÃO DEFINIDO",
+      GEMINI_API_KEY: GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 15) + "..." : "NÃO DEFINIDO",
       AI_MODEL,
       NOTIFY_PHONE
     },
@@ -1077,16 +1078,16 @@ app.get("/diagnostico", async (req, res) => {
     resultado.testes.whatsapp_token = { ok: false, erro: e.response?.data?.error?.message || e.message };
   }
 
-  // Testa OpenRouter
+  // Testa Gemini
   try {
     const r = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
+      `${AI_BASE_URL}/chat/completions`,
       { model: AI_MODEL, messages: [{ role: "user", content: "oi" }], max_tokens: 5 },
-      { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 }
+      { headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 }
     );
-    resultado.testes.openrouter = { ok: true, modelo: r.data.model };
+    resultado.testes.gemini = { ok: true, modelo: r.data.model };
   } catch (e) {
-    resultado.testes.openrouter = { ok: false, erro: e.response?.data?.error?.message || e.message };
+    resultado.testes.gemini = { ok: false, erro: e.response?.data?.error?.message || e.message };
   }
 
   // Testa banco de dados
