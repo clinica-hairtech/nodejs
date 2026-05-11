@@ -40,7 +40,7 @@ for VAR in TG_TOKEN WA_TOKEN WABA_ID WA_PHONE_ID WA_RICARDO GEMINI_KEY ANTHROPIC
   [ -z "${!VAR:-}" ] && { echo "ERRO: $VAR não definido em $SECRETS_FILE"; exit 1; }
 done
 
-RICARDO_TG_ID=""  # descoberto automaticamente no passo bootstrap
+RICARDO_TG_ID="${RICARDO_TG_ID:-}"  # pode ser pré-definido no .openclaw-secrets
 
 # ── HELPERS ──────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -95,7 +95,15 @@ wait_tg_keyword() {
 # Obtém RICARDO_TG_ID (chat_id mais recente do bot)
 bootstrap_tg_id() {
   sep "BOOTSTRAP — Descobrindo Telegram ID de Ricardo"
-  echo "👋 Mandando mensagem para o bot verificar se há atualizações..."
+
+  # Se já está definido (no .openclaw-secrets ou como variável de ambiente), usar direto
+  if [ -n "$RICARDO_TG_ID" ]; then
+    ok "RICARDO_TG_ID já configurado: $RICARDO_TG_ID"
+    notify_tg "🤖 *Script OpenClaw iniciado*. Estou instalando. Você será notificado em cada fase."
+    return 0
+  fi
+
+  echo "👋 Buscando ID de Ricardo nas mensagens recentes do bot..."
   local resp
   resp=$(curl -sf "https://api.telegram.org/bot${TG_TOKEN}/getUpdates?limit=10" 2>/dev/null || echo '{"result":[]}')
   RICARDO_TG_ID=$(echo "$resp" | python3 -c "
@@ -129,7 +137,7 @@ for upd in reversed(data.get('result',[])):
   fi
 
   if [ -z "$RICARDO_TG_ID" ]; then
-    err "Não consegui descobrir o Telegram ID. Verifique o bot."
+    err "Não consegui descobrir o Telegram ID. Adicione RICARDO_TG_ID=SEU_ID em /root/.openclaw-secrets e rode novamente."
     exit 1
   fi
   ok "RICARDO_TG_ID = $RICARDO_TG_ID"
