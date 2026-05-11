@@ -25,6 +25,15 @@ tg() {
 
 [ "$(id -u)" -eq 0 ] || { echo "ERRO: Execute como root"; exit 1; }
 
+# ── FIX OPENCLAW: remover TELEGRAM_BOT_TOKEN (OpenClaw é API HTTP pura) ────
+sep "FIX — OpenClaw: remover token Telegram (não usa polling)"
+if grep -q "^TELEGRAM_BOT_TOKEN=" /opt/hairtech-openclaw/.env 2>/dev/null; then
+  sed -i '/^TELEGRAM_BOT_TOKEN=/d' /opt/hairtech-openclaw/.env
+  ok "TELEGRAM_BOT_TOKEN removido do OpenClaw — não causa mais 409"
+else
+  ok "OpenClaw já não tem TELEGRAM_BOT_TOKEN"
+fi
+
 # ── FIX AUTHBOT TOKEN ─────────────────────────────────────────────
 sep "FIX — Authbot: trocar para token dedicado"
 AUTHBOT_TOKEN="8739677477:AAGu46zXdInO8D0z0Nioi9tnt9ZHjAEkcIg"
@@ -33,10 +42,10 @@ if [ -f /opt/hairtech-authbot/.env ]; then
   sed -i "s|^TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=${AUTHBOT_TOKEN}|" /opt/hairtech-authbot/.env
   ok "Token authbot atualizado"
   cd /opt/hairtech-authbot
-  docker compose restart
+  docker compose down && docker compose up -d
   sleep 10
   docker logs hairtech-authbot --tail 5
-  ok "Authbot reiniciado com token dedicado — conflito 409 resolvido"
+  ok "Authbot reiniciado com token dedicado"
 else
   warn "/opt/hairtech-authbot/.env não encontrado — authbot pode não estar instalado"
 fi
@@ -66,7 +75,6 @@ cat > /opt/hairtech-openclaw/config/openclaw.json <<JSON
     "bind": "lan",
     "auth": { "mode": "token", "token": "${TOKEN_VAL}" }
   },
-  "identity": { "name": "Admin", "emoji": "🛠", "theme": "engenheiro de plantão" },
   "logging": {
     "level": "info",
     "redactSensitive": "tools",

@@ -326,7 +326,6 @@ OPENCLAW_GATEWAY_TOKEN=__GERAR__
 GEMINI_API_KEY=${GEMINI_KEY}
 ANTHROPIC_API_KEY=${ANTHROPIC_KEY}
 OPENAI_API_KEY=${OPENAI_KEY}
-TELEGRAM_BOT_TOKEN=${TG_TOKEN}
 WA_TOKEN=${WA_TOKEN}
 WA_PHONE_ID=${WA_PHONE_ID}
 WA_RICARDO=${WA_RICARDO}
@@ -806,7 +805,6 @@ fase_6() {
     "bind": "lan",
     "auth": { "mode": "token", "token": "__TOKEN__" }
   },
-  "identity": { "name": "Admin", "emoji": "🛠", "theme": "engenheiro de plantão" },
   "logging": {
     "level": "info",
     "redactSensitive": "tools",
