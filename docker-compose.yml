@@ -12,6 +12,7 @@ services:
       - /home/user/nodejs:/app
     networks:
       - hairtech-network
+      - web
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.av.rule=Host(`hairtech.org`) && PathPrefix(`/webhook`,`/health`,`/comprovantes`,`/historico`,`/admin`,`/status`,`/nfse`)"
@@ -26,4 +27,6 @@ services:
 
 networks:
   hairtech-network:
+    external: true
+  web:
     external: true
