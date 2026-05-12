@@ -91,6 +91,15 @@ Resumo: DELETE sessão → CREATE → aguardar SCAN_QR_CODE → `/api/default/au
 
 ## PENDÊNCIAS PARA PRÓXIMA SESSÃO
 
+0. **[CRÍTICO] Meta Developers → Business Suite inbox**
+   - Conectar o app Meta Developers ao inbox do Business Suite
+   - Portal: business.facebook.com → Inbox → número WA_PHONE_ID 983992428140920
+   - Portal: developers.facebook.com → App → WhatsApp → Configuration
+   - Webhook `https://hairtech.org/webhook` deve estar subscrito para:
+     `messages`, `message_deliveries`, `message_reads`, `message_reactions`
+   - Sem isso: mensagens do AV principal podem não aparecer no Business Suite
+     e histórico desde criação da conta fica inacessível
+
 1. **Gemini 404** — `Erro ao interpretar comando natural: Request failed with status code 404`
    - Afeta NLP do AV principal (não ANA)
    - Verificar `AI_BASE_URL` no `.env` da VPS
