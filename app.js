@@ -20,7 +20,7 @@ const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY;
-const AI_MODEL         = "gemini-2.0-flash";
+const AI_MODEL         = "gemini-2.5-flash";
 const AI_BASE_URL      = "https://generativelanguage.googleapis.com/v1beta/openai";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
@@ -766,7 +766,7 @@ async function obterRespostaIA(numero, mensagem) {
   }
 
   try {
-    const aiResp = await chamarIA("gemini-2.5-flash-lite", c.historico);
+    const aiResp = await chamarIA("gemini-2.5-flash", c.historico);
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
     console.log("Resposta via Gemini 1.5 (fallback)");
     return aiResp;
