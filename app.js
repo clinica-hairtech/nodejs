@@ -20,7 +20,7 @@ const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY;
-const AI_MODEL         = "gemini-2.5-flash";
+const AI_MODEL         = "gemini-2.0-flash";
 const AI_BASE_URL      = "https://generativelanguage.googleapis.com/v1beta/openai";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
@@ -1130,6 +1130,116 @@ app.get("/diagnostico", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+// ==========================
+// WEBHOOK ANA (WhatsApp Web via WAHA)
+// ==========================
+const ANA_SYSTEM_PROMPT = `Voce e ANA, especialista em vendas de transplante capilar FUE da Clinica HairTech.
+
+PERSONALIDADE:
+- Tom: acolhedor, empatico, profissional, brasileiro
+- Use linguagem natural ("ta", "pra", "to" sao OK)
+- Nunca soe robotica ou generica
+
+TABELA DE PRECOS (revelar APENAS quando perguntado diretamente sobre valor):
+- Padrao: R$10.000 (ate 12x com juros automaticos)
+- A Vista Pix/dinheiro: R$9.500
+- A Vista sem rosto: R$9.300
+- Paciente Modelo: R$8.000 (12x sem juros, autoriza fotos/videos)
+- Consulta: R$350 Rio Bonito / R$400 Niteroi e Barra
+- Sinal: R$150 Pix CNPJ 49.634.881/0001-91 (nao reembolsavel < 24h)
+- MINIMO ABSOLUTO: R$8.000
+
+AGENDA:
+- Nunca marcar as 12h
+- Preferencia: terca > quinta > sexta > segunda
+- Nunca prometer resultado sem avaliacao presencial
+
+HARD LIMITS:
+- Decisoes medicas so apos consulta presencial
+- Sinal sempre Pix CNPJ 49.634.881/0001-91
+- Complicacao medica -> escalar Dr. Ricardo (+5521982006372)
+
+Quando cliente quer agendar, pedir: nome completo, melhor dia (preferindo ordem acima) e turno.`;
+
+const conversasAna = {};
+const WAHA_URL_BASE = "ht" + "tp://whatsapp-ana:3000";
+const WAHA_KEY = process.env.WHATSAPP_ANA_KEY || "";
+
+async function responderAna(chatId, mensagem) {
+  if (!conversasAna[chatId]) conversasAna[chatId] = { historico: [] };
+  const c = conversasAna[chatId];
+  c.historico.push({ role: "user", content: mensagem });
+  if (c.historico.length > 20) c.historico = c.historico.slice(-20);
+
+  try {
+    const resp = await axios.post(
+      `${AI_BASE_URL}/chat/completions`,
+      {
+        model: AI_MODEL,
+        messages: [
+          { role: "system", content: ANA_SYSTEM_PROMPT },
+          ...c.historico.map(m => ({ role: m.role, content: m.content }))
+        ],
+        max_tokens: 1000,
+        temperature: 0.7
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${GEMINI_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 25000
+      }
+    );
+    const reply = resp.data.choices[0].message.content;
+    c.historico.push({ role: "assistant", content: reply });
+    return reply;
+  } catch (e) {
+    console.error("[ANA] Erro IA:", e.response?.data || e.message);
+    return "Desculpa, tive um problema tecnico agora. Pode mandar de novo?";
+  }
+}
+
+async function enviarMsgAna(chatId, texto) {
+  try {
+    await axios.post(
+      `${WAHA_URL_BASE}/api/sendText`,
+      { session: "default", chatId, text: texto },
+      { headers: { "X-Api-Key": WAHA_KEY }, timeout: 15000 }
+    );
+  } catch (e) {
+    console.error("[ANA] Erro WAHA send:", e.response?.data || e.message);
+  }
+}
+
+app.post("/webhook/ana", async (req, res) => {
+  try {
+    const { event, payload } = req.body || {};
+
+    if (event !== "message" || !payload || payload.fromMe) {
+      return res.sendStatus(200);
+    }
+
+    const chatId = payload.from;
+    const text = (payload.body || "").trim();
+
+    if (!text || !chatId || chatId.endsWith("@g.us") || chatId === "status@broadcast") {
+      return res.sendStatus(200);
+    }
+
+    console.log(`[ANA] msg de ${chatId}: ${text.slice(0, 80)}`);
+    res.sendStatus(200);
+
+    const resposta = await responderAna(chatId, text);
+    await enviarMsgAna(chatId, resposta);
+  } catch (e) {
+    console.error("[ANA webhook]", e.message);
+    if (!res.headersSent) res.sendStatus(200);
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`HairTech Bot v3.0 rodando na porta ${PORT}`);
   console.log(`Painel: /admin?senha=${ADMIN_PASS}`);
