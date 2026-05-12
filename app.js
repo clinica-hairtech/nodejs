@@ -1215,14 +1215,18 @@ async function enviarMsgAna(chatId, texto) {
 
 app.post("/webhook/ana", async (req, res) => {
   try {
-    const { event, payload } = req.body || {};
+    const body = req.body || {};
+    const event = body.event || body.type || "";
+    const payload = body.payload || body.data || body;
+    console.log(`[ANA] webhook event="${event}" keys=${Object.keys(body).join(",")}`);
 
-    if (event !== "message" || !payload || payload.fromMe) {
+    if (payload.fromMe) return res.sendStatus(200);
+    if (!event || /status|ack|reaction|session|typing/i.test(event)) {
       return res.sendStatus(200);
     }
 
-    const chatId = payload.from;
-    const text = (payload.body || "").trim();
+    const chatId = (payload.from || payload.chatId || "").toString();
+    const text = (payload.body || payload.text || payload.content || "").trim();
 
     if (!text || !chatId || chatId.endsWith("@g.us") || chatId === "status@broadcast") {
       return res.sendStatus(200);
