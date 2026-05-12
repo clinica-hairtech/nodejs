@@ -13,6 +13,7 @@ services:
     networks:
       - hairtech-network
       - web
+      - hairtech-postgres
     extra_hosts:
       - "host.docker.internal:host-gateway"
     labels:
@@ -34,4 +35,6 @@ networks:
   hairtech-network:
     external: true
   web:
+    external: true
+  hairtech-postgres:
     external: true
