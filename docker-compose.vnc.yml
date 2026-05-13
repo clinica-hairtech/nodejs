@@ -1,0 +1,36 @@
+services:
+  claw-browser:
+    image: accetto/ubuntu-vnc-xfce-chromium:latest
+    container_name: claw-browser
+    restart: unless-stopped
+    shm_size: "512m"
+    environment:
+      # VNC_PW must be set in .env — empty value here will make the container refuse to start.
+      VNC_PW: "${VNC_PW:?VNC_PW missing in .env}"
+      VNC_RESOLUTION: "${VNC_RESOLUTION:-1366x768}"
+      TZ: "America/Sao_Paulo"
+    volumes:
+      - /opt/hairtech-openclaw/profiles:/home/headless/profiles
+    networks:
+      - web
+    ports:
+      # Bind ONLY to loopback — reach the UI via SSH tunnel:
+      #   ssh -L 6901:127.0.0.1:6901 root@<vps>
+      # then open http://localhost:6901/vnc.html  (senha = $VNC_PW)
+      - "127.0.0.1:5901:5901"   # raw VNC
+      - "127.0.0.1:6901:6901"   # noVNC / web UI
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "1500M"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 6901 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  web:
+    external: true

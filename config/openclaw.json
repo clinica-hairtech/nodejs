@@ -1,0 +1,83 @@
+{
+  "$schema": "https://openclaw.dev/schema/config.v1.json",
+  "server": {
+    "bind": "lan",
+    "port": 18789,
+    "host": "0.0.0.0",
+    "publicUrl": "https://claw.hairtech.org",
+    "trustProxy": true
+  },
+  "auth": {
+    "gateway": {
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "token": "${TELEGRAM_BOT_TOKEN}",
+      "allowedChatIds": ["${TELEGRAM_OWNER_CHAT_ID}"]
+    }
+  },
+  "workspace": {
+    "root": "/app/workspace",
+    "defaultAgent": "hairtech-principal"
+  },
+  "mcp": {
+    "servers": {
+      "filesystem": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/app/workspace"
+        ],
+        "description": "Read/write access scoped to the OpenClaw workspace."
+      },
+      "memory": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-memory"
+        ],
+        "env": {
+          "MEMORY_FILE_PATH": "/app/data/memory.jsonl"
+        },
+        "description": "Long-term key/value memory persisted on disk."
+      },
+      "sequential-thinking": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-sequential-thinking"
+        ],
+        "description": "Structured step-by-step reasoning helper."
+      },
+      "postgres": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-postgres",
+          "${POSTGRES_RO_URL}"
+        ],
+        "description": "READ-ONLY Postgres access (openclaw_ro role on hairtechdb).",
+        "readOnly": true
+      },
+      "playwright": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@playwright/mcp@latest"
+        ],
+        "env": {
+          "PLAYWRIGHT_BROWSERS_PATH": "/app/data/playwright"
+        },
+        "description": "Headless/headed browser automation via Playwright."
+      }
+    }
+  },
+  "logging": {
+    "level": "info",
+    "file": "/app/data/openclaw.log"
+  }
+}
