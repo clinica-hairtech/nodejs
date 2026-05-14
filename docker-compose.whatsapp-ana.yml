@@ -1,0 +1,25 @@
+services:
+  whatsapp-ana:
+    image: devlikeapro/whatsapp-http-api:latest
+    container_name: whatsapp-ana
+    restart: unless-stopped
+    environment:
+      WHATSAPP_HOOK_URL: "http://assistente-virtual:3001/webhook/ana"
+      WHATSAPP_HOOK_EVENTS: "message,session.status"
+      WHATSAPP_API_KEY: "${WHATSAPP_ANA_KEY:?WHATSAPP_ANA_KEY missing in .env}"
+      WHATSAPP_DEFAULT_ENGINE: "WEBJS"
+      WHATSAPP_FILES_FOLDER: "/app/.media"
+      WHATSAPP_FILES_LIFETIME: "180"
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"
+      TZ: "America/Sao_Paulo"
+    volumes:
+      - /home/user/nodejs/whatsapp-ana-data/sessions:/app/.sessions
+      - /home/user/nodejs/whatsapp-ana-data/media:/app/.media
+    networks:
+      - hairtech-network
+    expose:
+      - "3000"
+
+networks:
+  hairtech-network:
+    external: true

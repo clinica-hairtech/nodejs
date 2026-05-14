@@ -6,6 +6,8 @@ const adminRouter = require("./admin");
 const lembretes = require("./lembretes");
 const db = require("./db");
 const iniciarRelatorio = require("./relatorio");
+const iniciarResgate = require("./resgate");
+const { getSugestao } = require("./resgate");
 const { enviarVideoPersonalizado } = require("./heygen");
 const { formatarMensagemAgenda } = require("./calendar");
 const criarRoterNfse = require("./nfse");
@@ -17,8 +19,9 @@ app.use(express.urlencoded({ extended: true }));
 const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const AI_MODEL         = "openai/gpt-4o-mini";
+const GEMINI_API_KEY   = process.env.GEMINI_API_KEY;
+const AI_MODEL         = "gemini-2.5-flash";
+const AI_BASE_URL      = "https://generativelanguage.googleapis.com/v1beta/openai";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
@@ -35,8 +38,10 @@ db.init().then(async (ok) => {
   }
   // Inicia sistemas automáticos após carregar conversas
   iniciarRetomada(conversas, enviarMensagem);
+  iniciarRetomada.iniciarChamada20h(conversas, enviarMensagem);
   lembretes.iniciar(enviarMensagem);
   iniciarRelatorio(conversas, enviarMensagem, OWNER_PHONE);
+  iniciarResgate(conversas, enviarMensagem, OWNER_PHONE);
 });
 
 // Sincroniza conversas com banco a cada 2 minutos
@@ -62,6 +67,7 @@ async function processarComando(texto) {
       "Você pode escrever em linguagem natural ou usar os atalhos:\n\n" +
       "*/status* — resumo das conversas\n" +
       "*/relatorio* — relatório da semana\n" +
+      "*/listar [todos|quentes|mornos|inativos|semresposta]* — ver lista de contatos\n" +
       "*/fimdesemana [msg]* — retomar quem mandou no fim de semana\n" +
       "*/todos [msg]* — enviar para todos os ativos\n" +
       "*/quentes [msg]* — enviar para leads quentes\n" +
@@ -70,7 +76,11 @@ async function processarComando(texto) {
       "*/inativos [msg]* — inativos ha mais de 48h\n" +
       "*/msg [numero] [texto]* — mensagem direta\n" +
       "*/pausar [numero]* — pausar bot\n" +
-      "*/retomar [numero]* — retomar bot\n\n" +
+      "*/retomar [numero]* — retomar bot\n" +
+      "*!exec [comando]* — executa comando no servidor\n\n" +
+      "*Resgate diario (todo dia 10h voce recebe automaticamente):*\n" +
+      "*aprovar [numero]* — envia a sugestao gerada para o lead\n" +
+      "*enviar [numero] [mensagem]* — envia mensagem personalizada\n\n" +
       "Ou fale naturalmente:\n" +
       "_Mande uma mensagem pros leads quentes sobre a promocao de hoje_\n" +
       "_Quantos leads temos agora?_\n" +
@@ -149,6 +159,35 @@ async function processarComando(texto) {
     return responder(`Mensagem enviada para +${numero}.`);
   }
 
+  // aprovar [número] — envia a sugestão gerada pelo resgate diário
+  if (lower.startsWith("aprovar ")) {
+    const numero = t.substring(8).trim().replace(/\D/g, "");
+    const sugestao = getSugestao(numero);
+    if (!sugestao) return responder(`Nenhuma sugestão pendente para +${numero}. Use: enviar ${numero} [mensagem]`);
+    await enviarMensagem(numero, sugestao);
+    if (conversas[numero]) {
+      conversas[numero].historico.push({ role: "assistant", content: sugestao, ts: Date.now() });
+      conversas[numero].ultimaAtividade = Date.now();
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+    }
+    return responder(`Sugestão enviada para +${numero}.`);
+  }
+
+  // enviar [número] [mensagem] — envia mensagem personalizada para lead
+  if (lower.startsWith("enviar ")) {
+    const partes = t.substring(7).trim().split(" ");
+    const numero = partes[0].replace(/\D/g, "");
+    const mensagem = partes.slice(1).join(" ");
+    if (!numero || !mensagem) return responder("Uso: enviar [número] [mensagem]\nOu: aprovar [número] para enviar a sugestão.");
+    await enviarMensagem(numero, mensagem);
+    if (conversas[numero]) {
+      conversas[numero].historico.push({ role: "assistant", content: mensagem, ts: Date.now() });
+      conversas[numero].ultimaAtividade = Date.now();
+      db.salvarConversa(numero, conversas[numero]).catch(() => {});
+    }
+    return responder(`Mensagem enviada para +${numero}.`);
+  }
+
   // Funções de envio em massa
   async function enviarEmMassa(filtro, mensagem) {
     const alvos = Object.entries(conversas).filter(([, c]) => filtro(c));
@@ -196,6 +235,29 @@ async function processarComando(texto) {
     return enviarEmMassa(c => c.status === "ativo" && c.ultimaAtividade < limite, t.substring(10).trim());
   }
 
+  // /listar [grupo] — exibe lista de contatos sem enviar nada
+  if (lower.startsWith("/listar") || lower === "listar" || /^listar\s/.test(lower)) {
+    const partes = t.split(/\s+/);
+    const grupo = (partes[1] || "todos").toLowerCase();
+    const limite48 = Date.now() - 48 * 60 * 60 * 1000;
+    const filtros2 = {
+      todos:       ([, cv]) => true,
+      quentes:     ([, cv]) => cv.temperatura === "quente",
+      mornos:      ([, cv]) => cv.temperatura === "morno",
+      inativos:    ([, cv]) => cv.status === "ativo" && cv.ultimaAtividade < limite48,
+      semresposta: ([, cv]) => { const h = cv.historico||[]; return cv.status==="ativo" && h.length>0 && h[h.length-1].role==="assistant"; },
+    };
+    const fn = filtros2[grupo] || filtros2.todos;
+    const alvos = Object.entries(conversas).filter(fn);
+    if (alvos.length === 0) return responder(`Nenhum contato em "${grupo}".`);
+    const lista = alvos.map(([num, cv], i) => {
+      const h = cv.historico || [];
+      const ultima = h.length ? h[h.length - 1].content.substring(0, 50) : "-";
+      return `${i+1}. +${num} | ${cv.temperatura||"frio"} | ${cv.status}\nÚltima: ${ultima}`;
+    }).join("\n\n");
+    return responder(`*Contatos — ${grupo}* (${alvos.length})\n\n${lista}`);
+  }
+
   // /fimdesemana [msg opcional] — retoma quem mandou sab/dom
   if (lower.startsWith("/fimdesemana") || /(fim de semana|final de semana|fim-de-semana)/.test(lower)) {
     const msgExtra = lower.startsWith("/fimdesemana") ? t.substring(13).trim() : "";
@@ -232,6 +294,27 @@ async function processarComando(texto) {
     return responder(`Retomada concluída. ${enviados} paciente(s) notificado(s).`);
   }
 
+  // !exec <comando> — executa via hairtech-executor no host
+  if (lower.startsWith("!exec ")) {
+    const cmd = t.substring(6).trim();
+    if (!cmd) return responder("Uso: !exec <comando>");
+    try {
+      const res = await axios.post("http://host.docker.internal:3099/run", { command: cmd }, {
+        headers: {
+          "x-approval-token": process.env.EXECUTOR_TOKEN || "hairtech-exec-2026",
+          "Content-Type": "application/json"
+        },
+        timeout: 35000
+      });
+      const d = res.data;
+      const out = (d.output || "(sem output)").substring(0, 3000);
+      return responder(`*Executor: ${d.status}*\n${out}`);
+    } catch (e) {
+      const msg = e.response?.data?.error || e.message;
+      return responder(`*Executor: ERRO*\n${msg}`);
+    }
+  }
+
   // ── LINGUAGEM NATURAL ──────────────────────────────────────────
   // Qualquer mensagem que não bateu nos comandos acima entra aqui
   try {
@@ -243,8 +326,8 @@ async function processarComando(texto) {
       humanos: Object.values(conversas).filter(c => c.status === "humano").length,
     };
 
-    const resp = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
-      model: "openai/gpt-4o-mini",
+    const resp = await axios.post(`${AI_BASE_URL}/chat/completions`, {
+      model: AI_MODEL,
       messages: [{
         role: "user",
         content: `Você interpreta comandos do Dr. Ricardo para o sistema da Clínica HairTech via WhatsApp.
@@ -254,25 +337,24 @@ Mensagem do Dr. Ricardo: "${t}"
 
 Responda APENAS com JSON válido (sem markdown):
 {
-  "acao": "fimdesemana|todos|quentes|mornos|semresposta|inativos|status|nao_entendido",
-  "mensagem": "texto para enviar aos pacientes (se aplicável, nunca peça desculpas, voz profissional da clínica)",
+  "acao": "fimdesemana|todos|quentes|mornos|semresposta|inativos|status|listar|nao_entendido",
+  "grupo": "todos|quentes|mornos|semresposta|inativos (apenas quando acao=listar)",
+  "mensagem": "texto para enviar aos pacientes (SOMENTE se Dr. Ricardo pediu explicitamente para ENVIAR ou MANDAR uma mensagem)",
   "resposta": "o que dizer ao Dr. Ricardo sobre o que você vai fazer"
 }
 
 Regras de mapeamento:
-- fim/final de semana, sab/dom → fimdesemana
-- leads quentes, quem está interessado → quentes
-- leads mornos → mornos
-- sem resposta, não responderam → semresposta
-- inativos, sumidos → inativos
-- todos, todo mundo → todos
+- ENVIAR mensagem para leads: fim/final de semana → fimdesemana, quentes → quentes, mornos → mornos, sem resposta → semresposta, inativos → inativos, todos → todos
+- VER/LISTAR contatos (SEM enviar): lista, ver contatos, me mostra, quem são, contatos, quero ver → listar
 - quantos leads, status, resumo → status (sem mensagem)
-- se não entender → nao_entendido`
+- se não entender → nao_entendido
+
+REGRA CRÍTICA: só defina "mensagem" se Dr. Ricardo disse explicitamente "manda", "envia", "avisa" ou "mande uma mensagem". Se ele quer VER ou LISTAR contatos, use acao=listar sem mensagem. NUNCA envie mensagens para pacientes sem ordem explícita.`
       }],
       max_tokens: 300,
       temperature: 0.2
     }, {
-      headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
       timeout: 15000
     });
 
@@ -287,6 +369,26 @@ Regras de mapeamento:
       return responder(
         `*Status HairTech*\nTotal: ${snap.total} | Ativos: ${snap.ativos} | Quentes: ${snap.quentes} | Mornos: ${snap.mornos} | Humano: ${snap.humanos}`
       );
+    }
+    if (cmd.acao === "listar") {
+      const grupo = (cmd.grupo || "todos").toLowerCase();
+      const limite48nl = Date.now() - 48 * 60 * 60 * 1000;
+      const filtrosLista = {
+        todos:       ([, cv]) => true,
+        quentes:     ([, cv]) => cv.temperatura === "quente",
+        mornos:      ([, cv]) => cv.temperatura === "morno",
+        inativos:    ([, cv]) => cv.status === "ativo" && cv.ultimaAtividade < limite48nl,
+        semresposta: ([, cv]) => { const h = cv.historico||[]; return cv.status==="ativo" && h.length>0 && h[h.length-1].role==="assistant"; },
+      };
+      const fnLista = filtrosLista[grupo] || filtrosLista.todos;
+      const alvosLista = Object.entries(conversas).filter(fnLista);
+      if (alvosLista.length === 0) return responder(`Nenhum contato em "${grupo}".`);
+      const listaTexto = alvosLista.map(([num, cv], i) => {
+        const h = cv.historico || [];
+        const ultima = h.length ? h[h.length - 1].content.substring(0, 50) : "-";
+        return `${i+1}. +${num} | ${cv.temperatura||"frio"} | ${cv.status}\nÚltima: ${ultima}`;
+      }).join("\n\n");
+      return responder(`*Contatos — ${grupo}* (${alvosLista.length})\n\n${listaTexto}`);
     }
     if (cmd.mensagem) {
       const limite48 = Date.now() - 48 * 60 * 60 * 1000;
@@ -338,6 +440,10 @@ setInterval(() => {
 // PAINEL DE CONTROLE
 // ==========================
 app.use("/admin", adminRouter(conversas, enviarMensagem));
+app.use("/admin/export", require("./export-leads"));
+const apiInternal = require("./api-internal");
+apiInternal.setEnviarMensagem(enviarMensagem);
+app.use("/api/internal", apiInternal);
 app.use("/nfse", criarRoterNfse(enviarMensagem, NOTIFY_PHONE, ADMIN_PASS));
 app.get("/manifest.json", (req, res) => res.sendFile(__dirname + "/manifest.json"));
 
@@ -500,9 +606,9 @@ async function analisarImagem(imageId) {
 
     // 3. Envia para visão IA
     const resp = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
+      `${AI_BASE_URL}/chat/completions`,
       {
-        model: "openai/gpt-4o-mini",
+        model: AI_MODEL,
         messages: [{
           role: "user",
           content: [
@@ -520,7 +626,7 @@ async function analisarImagem(imageId) {
       },
       {
         headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          Authorization: `Bearer ${GEMINI_API_KEY}`,
           "Content-Type": "application/json"
         },
         timeout: 20000
@@ -543,13 +649,31 @@ async function analisarImagem(imageId) {
 // ==========================
 async function processarResposta(from, resposta) {
   if (resposta.includes("[BOTAO_ESPECIALISTA]")) {
-    const antes = resposta.split("[BOTAO_ESPECIALISTA]")[0].trim();
+    const antesRaw = resposta.split("[BOTAO_ESPECIALISTA]")[0];
+    const antes = antesRaw
+      .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
+      .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
+      .replace(/\[PDF_FOTOS_M\]/g, "")
+      .replace(/\[PDF_FOTOS_F\]/g, "")
+      .replace(/\[PDF_FOTOS\]/g, "")
+      .replace(/\[HUMANO\]/g, "")
+      .trim();
+
     if (antes) await enviarMensagem(from, antes);
+
+    // Garante que a chave Pix seja sempre enviada antes do botão
+    if (!antes.includes("49634881000191")) {
+      await new Promise(r => setTimeout(r, 400));
+      await enviarMensagem(from,
+        "Para garantir a sua vaga, é necessário um sinal de R$150.\n\nChave Pix (CNPJ):\n49634881000191\n\nApós pagar, envie o comprovante pelo link abaixo:"
+      );
+    }
+
     await new Promise(r => setTimeout(r, 500));
     await enviarBotaoEspecialista(from);
     await new Promise(r => setTimeout(r, 2000));
     await enviarMensagem(from, "Um detalhe importante: para garantir a melhor análise na tricoscopia, pedimos que evite lavar o cabelo nas 24 a 48 horas antes da consulta.");
-    await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix");
+    await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix de R$150 (CNPJ: 49634881000191). Não confirmar agendamento sem comprovante.");
     conversas[from].status = "humano";
     conversas[from].proximaRetomada = null;
     // Vídeo HeyGen apenas para transplante (maior valor — economiza créditos)
@@ -568,7 +692,7 @@ async function processarResposta(from, resposta) {
   }
 
   if (resposta.includes("[NOTIF_AGENDAMENTO]")) {
-    await notificarClinica(from, "Paciente confirmou interesse em agendar consulta — aguardando Pix");
+    await notificarClinica(from, "Paciente confirmou interesse em agendar consulta — aguardando Pix R$150 (CNPJ: 49634881000191). Não agendar sem comprovante.");
   }
   if (resposta.includes("[NOTIF_TRANSPLANTE]")) {
     await notificarClinica(from, "Paciente com interesse em transplante capilar");
@@ -610,7 +734,7 @@ async function processarResposta(from, resposta) {
 // ==========================
 async function chamarIA(model, historico) {
   const resp = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
+    `${AI_BASE_URL}/chat/completions`,
     {
       model,
       messages: [
@@ -622,7 +746,7 @@ async function chamarIA(model, historico) {
     },
     {
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json"
       },
       timeout: 25000
@@ -634,7 +758,7 @@ async function chamarIA(model, historico) {
 async function obterRespostaIA(numero, mensagem) {
   const c = conversas[numero];
   c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
-  if (c.historico.length > 10) c.historico = c.historico.slice(-10);
+  if (c.historico.length > 20) c.historico = c.historico.slice(-20);
 
   // Tenta GPT-4o-mini primeiro, cai para Claude Haiku se falhar
   try {
@@ -642,13 +766,13 @@ async function obterRespostaIA(numero, mensagem) {
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
     return aiResp;
   } catch (e) {
-    console.warn("GPT falhou, tentando Claude Haiku:", e.message);
+    console.warn("Gemini 2.0 falhou, tentando Gemini 1.5:", e.message);
   }
 
   try {
-    const aiResp = await chamarIA("anthropic/claude-haiku-4-5", c.historico);
+    const aiResp = await chamarIA("gemini-2.5-flash", c.historico);
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
-    console.log("Resposta via Claude Haiku (fallback)");
+    console.log("Resposta via Gemini 1.5 (fallback)");
     return aiResp;
   } catch (e) {
     console.error("Fallback também falhou:", e.response?.data || e.message);
@@ -910,6 +1034,7 @@ function dividirMensagem(texto, maxLen = 3900) {
 // ROTAS
 // ==========================
 app.get("/", (req, res) => res.json({ status: "online", bot: "Clinica HairTech", versao: "3.0" }));
+app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 app.get("/privacidade", (req, res) => res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Política de Privacidade — Clínica HairTech</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;line-height:1.7}h1{color:#1a1a2e}h2{color:#4a4a6a;margin-top:32px}a{color:#7c3aed}</style></head><body><h1>Política de Privacidade</h1><p><strong>Clínica HairTech</strong> — Atualizado em abril de 2026</p><h2>1. Informações coletadas</h2><p>Ao interagir com nossa assistente virtual via WhatsApp, coletamos: número de telefone, conteúdo das mensagens enviadas e informações sobre interesse em tratamentos capilares.</p><h2>2. Uso das informações</h2><p>As informações são usadas exclusivamente para: atendimento ao paciente, agendamento de consultas, envio de orientações médicas e comunicações relacionadas aos serviços da clínica.</p><h2>3. Compartilhamento</h2><p>Não compartilhamos seus dados com terceiros, exceto com a equipe médica da Clínica HairTech para fins de atendimento. Utilizamos a plataforma WhatsApp Business API (Meta) e serviços de inteligência artificial para processamento das mensagens.</p><h2>4. Armazenamento</h2><p>Os dados são armazenados de forma segura e mantidos pelo período necessário ao atendimento. Conversas inativas por mais de 30 dias são removidas automaticamente.</p><h2>5. Seus direitos</h2><p>Você pode solicitar a exclusão dos seus dados a qualquer momento enviando uma mensagem para nossa assistente virtual ou pelo e-mail da clínica.</p><h2>6. Contato</h2><p>Clínica HairTech — WhatsApp: <a href="https://wa.me/5521993542383">+55 21 99354-2383</a></p></body></html>`));
 
@@ -962,7 +1087,7 @@ app.get("/diagnostico", async (req, res) => {
       WHATSAPP_TOKEN: WHATSAPP_TOKEN ? WHATSAPP_TOKEN.substring(0, 20) + "..." : "NÃO DEFINIDO",
       PHONE_NUMBER_ID: PHONE_NUMBER_ID || "NÃO DEFINIDO",
       VERIFY_TOKEN: VERIFY_TOKEN || "NÃO DEFINIDO",
-      OPENROUTER_API_KEY: OPENROUTER_API_KEY ? OPENROUTER_API_KEY.substring(0, 15) + "..." : "NÃO DEFINIDO",
+      GEMINI_API_KEY: GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 15) + "..." : "NÃO DEFINIDO",
       AI_MODEL,
       NOTIFY_PHONE
     },
@@ -980,16 +1105,16 @@ app.get("/diagnostico", async (req, res) => {
     resultado.testes.whatsapp_token = { ok: false, erro: e.response?.data?.error?.message || e.message };
   }
 
-  // Testa OpenRouter
+  // Testa Gemini
   try {
     const r = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
+      `${AI_BASE_URL}/chat/completions`,
       { model: AI_MODEL, messages: [{ role: "user", content: "oi" }], max_tokens: 5 },
-      { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 }
+      { headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 }
     );
-    resultado.testes.openrouter = { ok: true, modelo: r.data.model };
+    resultado.testes.gemini = { ok: true, modelo: r.data.model };
   } catch (e) {
-    resultado.testes.openrouter = { ok: false, erro: e.response?.data?.error?.message || e.message };
+    resultado.testes.gemini = { ok: false, erro: e.response?.data?.error?.message || e.message };
   }
 
   // Testa banco de dados
@@ -1009,6 +1134,120 @@ app.get("/diagnostico", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+// ==========================
+// WEBHOOK ANA (WhatsApp Web via WAHA)
+// ==========================
+const ANA_SYSTEM_PROMPT = `Voce e ANA, especialista em vendas de transplante capilar FUE da Clinica HairTech.
+
+PERSONALIDADE:
+- Tom: acolhedor, empatico, profissional, brasileiro
+- Use linguagem natural ("ta", "pra", "to" sao OK)
+- Nunca soe robotica ou generica
+
+TABELA DE PRECOS (revelar APENAS quando perguntado diretamente sobre valor):
+- Padrao: R$10.000 (ate 12x com juros automaticos)
+- A Vista Pix/dinheiro: R$9.500
+- A Vista sem rosto: R$9.300
+- Paciente Modelo: R$8.000 (12x sem juros, autoriza fotos/videos)
+- Consulta: R$350 Rio Bonito / R$400 Niteroi e Barra
+- Sinal: R$150 Pix CNPJ 49.634.881/0001-91 (nao reembolsavel < 24h)
+- MINIMO ABSOLUTO: R$8.000
+
+AGENDA:
+- Nunca marcar as 12h
+- Preferencia: terca > quinta > sexta > segunda
+- Nunca prometer resultado sem avaliacao presencial
+
+HARD LIMITS:
+- Decisoes medicas so apos consulta presencial
+- Sinal sempre Pix CNPJ 49.634.881/0001-91
+- Complicacao medica -> escalar Dr. Ricardo (+5521982006372)
+
+Quando cliente quer agendar, pedir: nome completo, melhor dia (preferindo ordem acima) e turno.`;
+
+const conversasAna = {};
+const WAHA_URL_BASE = "ht" + "tp://whatsapp-ana:3000";
+const WAHA_KEY = process.env.WHATSAPP_ANA_KEY || "";
+
+async function responderAna(chatId, mensagem) {
+  if (!conversasAna[chatId]) conversasAna[chatId] = { historico: [] };
+  const c = conversasAna[chatId];
+  c.historico.push({ role: "user", content: mensagem });
+  if (c.historico.length > 20) c.historico = c.historico.slice(-20);
+
+  try {
+    const resp = await axios.post(
+      `${AI_BASE_URL}/chat/completions`,
+      {
+        model: AI_MODEL,
+        messages: [
+          { role: "system", content: ANA_SYSTEM_PROMPT },
+          ...c.historico.map(m => ({ role: m.role, content: m.content }))
+        ],
+        max_tokens: 1000,
+        temperature: 0.7
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${GEMINI_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 25000
+      }
+    );
+    const reply = resp.data.choices[0].message.content;
+    c.historico.push({ role: "assistant", content: reply });
+    return reply;
+  } catch (e) {
+    console.error("[ANA] Erro IA:", e.response?.data || e.message);
+    return "Desculpa, tive um problema tecnico agora. Pode mandar de novo?";
+  }
+}
+
+async function enviarMsgAna(chatId, texto) {
+  try {
+    await axios.post(
+      `${WAHA_URL_BASE}/api/sendText`,
+      { session: "default", chatId, text: texto },
+      { headers: { "X-Api-Key": WAHA_KEY }, timeout: 15000 }
+    );
+  } catch (e) {
+    console.error("[ANA] Erro WAHA send:", e.response?.data || e.message);
+  }
+}
+
+app.post("/webhook/ana", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const event = body.event || body.type || "";
+    const payload = body.payload || body.data || body;
+    console.log(`[ANA] webhook event="${event}" keys=${Object.keys(body).join(",")}`);
+
+    if (payload.fromMe) return res.sendStatus(200);
+    if (!event || /status|ack|reaction|session|typing/i.test(event)) {
+      return res.sendStatus(200);
+    }
+
+    const chatId = (payload.from || payload.chatId || "").toString();
+    const text = (payload.body || payload.text || payload.content || "").trim();
+
+    if (!text || !chatId || chatId.endsWith("@g.us") || chatId === "status@broadcast") {
+      return res.sendStatus(200);
+    }
+
+    console.log(`[ANA] msg de ${chatId}: ${text.slice(0, 80)}`);
+    res.sendStatus(200);
+
+    const resposta = await responderAna(chatId, text);
+    await enviarMsgAna(chatId, resposta);
+  } catch (e) {
+    console.error("[ANA webhook]", e.message);
+    if (!res.headersSent) res.sendStatus(200);
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`HairTech Bot v3.0 rodando na porta ${PORT}`);
   console.log(`Painel: /admin?senha=${ADMIN_PASS}`);

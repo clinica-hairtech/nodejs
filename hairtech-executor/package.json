@@ -1,0 +1,12 @@
+{
+  "name": "hairtech-executor",
+  "version": "1.0.0",
+  "description": "Executor seguro local HairTech — apenas comandos da allowlist",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

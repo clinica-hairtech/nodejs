@@ -1,0 +1,18 @@
+[Unit]
+Description=HairTech Executor Seguro
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/user/nodejs/hairtech-executor
+ExecStart=/usr/bin/node /home/user/nodejs/hairtech-executor/server.js
+Restart=always
+RestartSec=5
+Environment=APPROVAL_TOKEN=hairtech-exec-2026
+StandardOutput=append:/home/user/nodejs/hairtech-executor/executor.log
+StandardError=append:/home/user/nodejs/hairtech-executor/executor.log
+
+[Install]
+WantedBy=multi-user.target

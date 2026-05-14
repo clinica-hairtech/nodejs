@@ -1,0 +1,54 @@
+{
+  "_comentario": "Snippet para mesclar no openclaw.json existente. NAO substitui o arquivo todo. Mescla so o bloco 'agents.hairtech-orquestrador' e adiciona se nao existir.",
+
+  "agents": {
+    "hairtech-orquestrador": {
+      "name": "HairTech Orquestrador",
+      "description": "Agente que monitora leads do AV, alimenta ANA e protege fluxo da clinica",
+      "soulFile": "/home/node/.openclaw/workspace/agents/hairtech-orquestrador/SOUL.md",
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-5",
+        "fallbacks": [
+          "google/gemini-2.5-flash",
+          "openai/gpt-4o"
+        ]
+      },
+      "tools": {
+        "http": {
+          "enabled": true,
+          "baseUrls": {
+            "av-interno": "http://assistente-virtual:3001/api/internal"
+          },
+          "auth": {
+            "av-interno": {
+              "type": "bearer",
+              "tokenEnv": "INTERNAL_API_TOKEN"
+            }
+          },
+          "allowedHosts": [
+            "assistente-virtual:3001",
+            "assistente-virtual"
+          ]
+        }
+      },
+      "schedule": {
+        "relatorio-ana": {
+          "cron": "0 9,13,18 * * *",
+          "timezone": "America/Sao_Paulo",
+          "instruction": "Gere e envie o relatorio completo de leads para a ANA seguindo o fluxo descrito na SOUL.md. Use GET /relatorio-completo, sintetize as prioridades e mande via Telegram para o canal da clinica."
+        },
+        "alerta-leads-frios": {
+          "cron": "30 11 * * *",
+          "timezone": "America/Sao_Paulo",
+          "instruction": "Consulte /leads?sem_resposta=true&desde_horas=4. Se houver leads quentes sem resposta ha mais de 2h, notifique o Dr. Ricardo via /notificar-dono com urgente=true."
+        }
+      },
+      "channels": {
+        "telegram": {
+          "enabled": true,
+          "owner": "8713631351"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+services:
+  hairtech-openclaw:
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    container_name: hairtech-openclaw
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      OPENCLAW_BIND: "lan"
+      OPENCLAW_PORT: "18789"
+      OPENCLAW_CONFIG: "/app/config/openclaw.json"
+      OPENCLAW_WORKSPACE: "/app/workspace"
+      TZ: "America/Sao_Paulo"
+    volumes:
+      - /opt/hairtech-openclaw/config:/app/config
+      - /opt/hairtech-openclaw/workspace:/app/workspace
+      - /opt/hairtech-openclaw/profiles:/app/profiles
+      - /opt/hairtech-openclaw/data:/app/data
+    networks:
+      - web
+      - hairtech-network
+      - hairtech-postgres
+    expose:
+      - "18789"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.openclaw.rule=Host(`claw.hairtech.org`)"
+      - "traefik.http.routers.openclaw.entrypoints=websecure"
+      - "traefik.http.routers.openclaw.tls=true"
+      - "traefik.http.routers.openclaw.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.openclaw.priority=200"
+      - "traefik.http.routers.openclaw.middlewares=openclaw-auth@docker"
+      - "traefik.http.services.openclaw.loadbalancer.server.port=18789"
+      # BasicAuth credentials are injected from the OPENCLAW_BASICAUTH env var
+      # (htpasswd-style: user:$$apr1$$...). Generate with:
+      #   htpasswd -nbB ricardo 'SENHA' | sed -e s/\\$/\\$\\$/g
+      - "traefik.http.middlewares.openclaw-auth.basicauth.users=${OPENCLAW_BASICAUTH:?OPENCLAW_BASICAUTH missing in .env}"
+      - "traefik.http.middlewares.openclaw-auth.basicauth.realm=HairTech OpenClaw"
+      - "traefik.http.middlewares.openclaw-auth.basicauth.removeheader=true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  web:
+    external: true
+  hairtech-network:
+    external: true
+  hairtech-postgres:
+    external: true
