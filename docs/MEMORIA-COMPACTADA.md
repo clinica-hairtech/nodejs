@@ -1,6 +1,7 @@
 # MEMÓRIA COMPACTADA — HairTech AI
-# Atualizada: 2026-05-14 02:30 BRT
-# Status: ANA CONECTADA | OpenClaw integrado | Deploy 7/8 OK
+# Atualizada: 2026-05-14 03:05 BRT
+# Status: ANA CONECTADA + WEBHOOK OK | OpenClaw integrado | Deploy 7/8 OK
+# Marco: ANA agora tem webhook apontando para AV (PUT manual aplicado em 14/05 03:00 BRT)
 
 > **REGRA ABSOLUTA PARA CLAUDE:** Este arquivo é a fonte da verdade desta sessão de trabalho.
 > Leia integralmente ao iniciar. Atualize ao fim de cada sessão antes de compactar.
@@ -118,11 +119,23 @@ const OWNER_PHONE = OWNER_PHONES[0];
 // if (OWNER_PHONES.includes(from) && message.type === "text") {
 ```
 
-### 🟡 P3 — Testar ANA respondendo end-to-end
-ANA está CONNECTED. Falta confirmar resposta real:
-1. Mandar mensagem do número pessoal de Ricardo para +5521967813366
-2. Verificar log: `docker logs assistente-virtual --tail 30 | grep ANA`
-3. Esperado: log `[ANA] msg de ...` seguido de `[ANA] resposta enviada` (ou erro Gemini)
+### 🟡 P3 — Testar ANA respondendo end-to-end (EM CURSO)
+ANA está CONNECTED + WEBHOOK configurado em 14/05 03:00 BRT via PUT manual.
+Estado validado via curl:
+- `me.id: 5521967813366@c.us`
+- `engine.state: CONNECTED`
+- `engine: WEBJS`
+- `webhooks: [{url: http://assistente-virtual:3001/webhook/ana, events: [message, session.status]}]`
+- `status: STARTING` (cosmético, IGNORAR — usar engine.state)
+
+**Próximo:** Ricardo manda mensagem do pessoal +5521982006372 para +5521967813366 e confirma resposta da ANA. Se não responder, ver: `docker logs assistente-virtual --tail 30 | grep -iE "ANA|webhook"`
+
+**Como o webhook foi configurado** (lição aprendida — adicionar ao docker-compose.whatsapp-ana.yml para sobreviver a restart):
+```bash
+PUT /api/sessions/default
+body: {"config":{"webhooks":[{"url":"http://assistente-virtual:3001/webhook/ana","events":["message","session.status"]}]}}
+```
+Quando container reiniciar, sessão recarrega de disco MAS sem webhook (a menos que esteja no compose como env). Precisa ou re-aplicar PUT ou colocar `WHATSAPP_HOOK_URL` no compose (que JÁ está, mas só vale na criação inicial da sessão).
 
 ### 🟡 P4 — Ricardo usar `/admin/export` para recuperar leads
 URL: `https://hairtech.org/admin/export?senha=hairtech2026` → filtro "sem-resposta" mostra os perdidos.
