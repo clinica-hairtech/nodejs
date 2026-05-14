@@ -440,6 +440,7 @@ setInterval(() => {
 // PAINEL DE CONTROLE
 // ==========================
 app.use("/admin", adminRouter(conversas, enviarMensagem));
+app.use("/admin/export", require("./export-leads"));
 app.use("/nfse", criarRoterNfse(enviarMensagem, NOTIFY_PHONE, ADMIN_PASS));
 app.get("/manifest.json", (req, res) => res.sendFile(__dirname + "/manifest.json"));
 
