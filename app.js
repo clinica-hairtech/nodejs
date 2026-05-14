@@ -631,10 +631,57 @@ async function chamarIA(model, historico) {
   return resp.data.choices[0].message.content;
 }
 
+async function comprimirConversa(historico) {
+  if (historico.length <= 6) return historico;
+
+  const mensagensAntigas = historico.slice(0, -6);
+  const mensagensRecentes = historico.slice(-6);
+
+  try {
+    const resumo = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: AI_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: `Resuma brevemente (máx 200 caracteres) o contexto dessa conversa de forma que você possa entender a discussão prévia ao ler depois:\n\n${
+              mensagensAntigas
+                .map(m => `${m.role === "user" ? "Paciente" : "Assistente"}: ${m.content}`)
+                .join("\n\n")
+            }\n\nResuma em uma única linha, mantendo apenas o essencial.`
+          }
+        ],
+        max_tokens: 100,
+        temperature: 0.3
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 10000
+      }
+    );
+
+    const summarized = resumo.data.choices[0].message.content.trim();
+    return [
+      { role: "system", content: `[Contexto prévio resumido] ${summarized}`, ts: Date.now() },
+      ...mensagensRecentes
+    ];
+  } catch (e) {
+    console.warn("Falha ao comprimir conversa, mantendo últimas 6 mensagens:", e.message);
+    return mensagensRecentes;
+  }
+}
+
 async function obterRespostaIA(numero, mensagem) {
   const c = conversas[numero];
   c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
-  if (c.historico.length > 10) c.historico = c.historico.slice(-10);
+
+  if (c.historico.length > 10) {
+    c.historico = await comprimirConversa(c.historico);
+  }
 
   // Tenta GPT-4o-mini primeiro, cai para Claude Haiku se falhar
   try {
