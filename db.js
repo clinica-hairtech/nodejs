@@ -36,6 +36,8 @@ async function init() {
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS tags TEXT DEFAULT '';
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS valor NUMERIC DEFAULT 0;
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS origem TEXT DEFAULT 'whatsapp';
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS historico_completo JSONB DEFAULT '[]';
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS resumo_contexto TEXT DEFAULT '';
 
       CREATE TABLE IF NOT EXISTS mensagens (
         id SERIAL PRIMARY KEY,
@@ -98,8 +100,9 @@ async function salvarConversa(numero, c) {
     await pool.query(`
       INSERT INTO conversations
         (numero, status, tipo, temperatura, genero, nome, nota, tags, valor, origem,
-         retomadas, proxima_retomada, ultima_atividade, historico, aguardando_avaliacao, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
+         retomadas, proxima_retomada, ultima_atividade, historico, aguardando_avaliacao,
+         historico_completo, resumo_contexto, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
       ON CONFLICT (numero) DO UPDATE SET
         status = EXCLUDED.status,
         tipo = EXCLUDED.tipo,
@@ -115,6 +118,8 @@ async function salvarConversa(numero, c) {
         ultima_atividade = EXCLUDED.ultima_atividade,
         historico = EXCLUDED.historico,
         aguardando_avaliacao = EXCLUDED.aguardando_avaliacao,
+        historico_completo = EXCLUDED.historico_completo,
+        resumo_contexto = EXCLUDED.resumo_contexto,
         updated_at = NOW()
     `, [
       numero,
@@ -131,7 +136,9 @@ async function salvarConversa(numero, c) {
       c.proximaRetomada || null,
       c.ultimaAtividade || Date.now(),
       JSON.stringify((c.historico || []).slice(-30)),
-      c.aguardandoAvaliacao || false
+      c.aguardandoAvaliacao || false,
+      JSON.stringify(c.historico || []),
+      c.resumoContexto || ""
     ]);
   } catch (e) {
     console.error("Erro ao salvar conversa:", e.message);

@@ -631,8 +631,8 @@ async function chamarIA(model, historico) {
   return resp.data.choices[0].message.content;
 }
 
-async function comprimirConversa(historico) {
-  if (historico.length <= 6) return historico;
+async function comprimirConversa(numero, historico) {
+  if (historico.length <= 6) return { historico, resumo: null };
 
   const mensagensAntigas = historico.slice(0, -6);
   const mensagensRecentes = historico.slice(-6);
@@ -665,13 +665,20 @@ async function comprimirConversa(historico) {
     );
 
     const summarized = resumo.data.choices[0].message.content.trim();
-    return [
+    const historicoComprimido = [
       { role: "system", content: `[Contexto prévio resumido] ${summarized}`, ts: Date.now() },
       ...mensagensRecentes
     ];
+
+    // Salva o resumo no banco para backup
+    conversas[numero].resumoContexto = summarized;
+
+    console.log(`[${numero}] Conversa comprimida: ${mensagensAntigas.length} msgs → resumo (${summarized.length} chars)`);
+
+    return { historico: historicoComprimido, resumo: summarized };
   } catch (e) {
     console.warn("Falha ao comprimir conversa, mantendo últimas 6 mensagens:", e.message);
-    return mensagensRecentes;
+    return { historico: mensagensRecentes, resumo: null };
   }
 }
 
@@ -680,7 +687,8 @@ async function obterRespostaIA(numero, mensagem) {
   c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
 
   if (c.historico.length > 10) {
-    c.historico = await comprimirConversa(c.historico);
+    const { historico } = await comprimirConversa(numero, c.historico);
+    c.historico = historico;
   }
 
   // Tenta GPT-4o-mini primeiro, cai para Claude Haiku se falhar
