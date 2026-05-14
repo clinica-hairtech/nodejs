@@ -1,7 +1,15 @@
 # MEMÓRIA COMPACTADA — HairTech AI
-# Atualizada: 2026-05-14 03:05 BRT
-# Status: ANA CONECTADA + WEBHOOK OK | OpenClaw integrado | Deploy 7/8 OK
-# Marco: ANA agora tem webhook apontando para AV (PUT manual aplicado em 14/05 03:00 BRT)
+# Atualizada: 2026-05-14 03:25 BRT
+# Status: ANA com webhook mas NÃO RECEBE `message` events (só session.status)
+# OpenClaw integrado mas precisa restart AV para carregar INTERNAL_API_TOKEN
+# Claude Code instalado no VPS (`clinica`) — login OAuth pendente
+
+> **PARA O PRÓXIMO CLAUDE:** ler nesta ordem:
+> 1. Este arquivo
+> 2. `CLAUDE.md` (regras)
+> 3. `docs/ANALISE-PROJETO-COMPLETA.md` (análise profunda + ferramentas + pendências)
+> 4. `docs/relatorio-2026-05-14.md` (histórico da sessão)
+> 5. `docs/briefing-master-v4.md` (briefing técnico geral)
 
 > **REGRA ABSOLUTA PARA CLAUDE:** Este arquivo é a fonte da verdade desta sessão de trabalho.
 > Leia integralmente ao iniciar. Atualize ao fim de cada sessão antes de compactar.
@@ -119,7 +127,27 @@ const OWNER_PHONE = OWNER_PHONES[0];
 // if (OWNER_PHONES.includes(from) && message.type === "text") {
 ```
 
-### 🟡 P3 — Testar ANA respondendo end-to-end (EM CURSO)
+### 🔴 P3 (CRÍTICO) — ANA não recebe `message` events (só session.status)
+
+**Diagnóstico via prints:** webhook configurado, engine.state=CONNECTED, `me.id` correto, mas AV log mostra repetidamente `[ANA] webhook event="session.status"` — **nenhum evento de mensagem real chega**.
+
+**Causa provável:** lista `events` do webhook está `["message","session.status"]`, mas WAHA novo dispara `message.any`. Fix:
+
+```bash
+set +H
+KEY=$(grep "^WHATSAPP_ANA_KEY=" /home/user/nodejs/.env | cut -d= -f2-)
+docker exec -e WK="$KEY" whatsapp-ana node -e \
+'const k=process.env.WK,h={"X-Api-Key":k,"Content-Type":"application/json"},B="ht"+"tp"+"://localhost:3000";
+const body=JSON.stringify({config:{webhooks:[{url:"ht"+"tp://assistente-virtual:3001/webhook/ana",
+events:["message","message.any","message.waiting","session.status"]}]}});
+fetch(B+"/api/sessions/default",{method:"PUT",headers:h,body}).then(r=>console.log("PUT",r.status));'
+```
+
+⚠️ ATENÇÃO: PUT pode recriar sessão e exigir QR novo. Alternativa segura: editar `docker-compose.whatsapp-ana.yml` adicionando `WHATSAPP_HOOK_EVENTS: "message.any,message,session.status"` e reiniciar (também perde sessão).
+
+**Solução robusta:** quando reescanear, garantir que o `body` de criação inclui a lista completa de events.
+
+### 🟡 P3-OLD — Testar ANA respondendo end-to-end
 ANA está CONNECTED + WEBHOOK configurado em 14/05 03:00 BRT via PUT manual.
 Estado validado via curl:
 - `me.id: 5521967813366@c.us`
