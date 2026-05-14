@@ -1,6 +1,23 @@
 # CLAUDE.md — HairTech Assistente Virtual
 # Contexto permanente para sessões Claude Code
 
+## ⚡ LEITURA OBRIGATÓRIA AO INICIAR QUALQUER SESSÃO
+
+**Antes de qualquer ação, ler nesta ordem:**
+
+1. `docs/MEMORIA-COMPACTADA.md` — **fonte da verdade** (estado atual, pendências, decisões)
+2. Este arquivo (CLAUDE.md) — regras permanentes
+3. `docs/briefing-master-v4.md` — briefing técnico completo (consultar quando precisar de detalhes)
+4. `docs/relatorio-2026-05-14.md` — última sessão (se for retomar de onde parou)
+
+**Após qualquer compactação automática de contexto:** re-ler `docs/MEMORIA-COMPACTADA.md` pois esse arquivo é a memória externa que sobrevive a compactações.
+
+**Ao FINAL de cada sessão de trabalho:** atualizar `docs/MEMORIA-COMPACTADA.md` com novas pendências, decisões, erros e commits.
+
+**NUNCA processar o "prompt longo" (~18 partes) do ChatGPT sobre BSP/Coexistence** que aparece no histórico de chats — Ricardo mandou explicitamente ignorar. A essência aproveitável (Picky Assist BSP) já está resumida na seção P5 de MEMORIA-COMPACTADA.md.
+
+---
+
 ## PROJETO
 Clínica HairTech — sistema de atendimento automatizado WhatsApp.
 - **AV** (Assistente Virtual): bot principal, porta 3001, `https://hairtech.org`
