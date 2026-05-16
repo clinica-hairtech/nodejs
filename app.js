@@ -19,6 +19,7 @@ const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const AI_MODEL         = "openai/gpt-4o-mini";
+const AI_MODEL_FALLBACK = "anthropic/claude-haiku-4.5";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
 const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
@@ -646,7 +647,7 @@ async function obterRespostaIA(numero, mensagem) {
   }
 
   try {
-    const aiResp = await chamarIA("anthropic/claude-haiku-4-5", c.historico);
+    const aiResp = await chamarIA(AI_MODEL_FALLBACK, c.historico);
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
     console.log("Resposta via Claude Haiku (fallback)");
     return aiResp;
@@ -964,6 +965,7 @@ app.get("/diagnostico", async (req, res) => {
       VERIFY_TOKEN: VERIFY_TOKEN || "NÃO DEFINIDO",
       OPENROUTER_API_KEY: OPENROUTER_API_KEY ? OPENROUTER_API_KEY.substring(0, 15) + "..." : "NÃO DEFINIDO",
       AI_MODEL,
+      AI_MODEL_FALLBACK,
       NOTIFY_PHONE
     },
     testes: {}
@@ -980,7 +982,7 @@ app.get("/diagnostico", async (req, res) => {
     resultado.testes.whatsapp_token = { ok: false, erro: e.response?.data?.error?.message || e.message };
   }
 
-  // Testa OpenRouter
+  // Testa OpenRouter (modelo principal)
   try {
     const r = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
@@ -990,6 +992,18 @@ app.get("/diagnostico", async (req, res) => {
     resultado.testes.openrouter = { ok: true, modelo: r.data.model };
   } catch (e) {
     resultado.testes.openrouter = { ok: false, erro: e.response?.data?.error?.message || e.message };
+  }
+
+  // Testa OpenRouter (fallback Claude Haiku)
+  try {
+    const r = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      { model: AI_MODEL_FALLBACK, messages: [{ role: "user", content: "oi" }], max_tokens: 5 },
+      { headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 }
+    );
+    resultado.testes.openrouter_fallback = { ok: true, modelo: r.data.model };
+  } catch (e) {
+    resultado.testes.openrouter_fallback = { ok: false, erro: e.response?.data?.error?.message || e.message };
   }
 
   // Testa banco de dados
