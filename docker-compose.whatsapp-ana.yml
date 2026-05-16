@@ -1,6 +1,6 @@
 services:
   whatsapp-ana:
-    image: devlikeapro/whatsapp-http-api:2024.11
+    image: devlikeapro/waha:latest-2026.4.3
     container_name: whatsapp-ana
     restart: unless-stopped
     environment:
