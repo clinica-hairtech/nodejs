@@ -1,9 +1,26 @@
 #!/bin/bash
-# auto-apply.sh — executado pelo cron de auto-deploy a cada commit novo.
-# Idempotente. Loga tudo em /var/log/hairtech-autodeploy.log.
+# auto-apply.sh v5 — MANUS DEPLOY MODE (17/05/2026 madrugada)
 #
-# Round 4 (17/05/2026): instala watchdog AV permanente, garante self-healing
-# independente do auto-deploy. T0 e novo, demais tasks iguais ao v3.
+# CONTEXTO CRITICO (briefing Manus 23:27 BRT):
+# - AV, whatsapp-ana, whatsapp-inbox, hairtech-operator-bridge PARADOS
+#   INTENCIONALMENTE pra debug. NAO RELIGAR ATE Manus/Dr. Ricardo autorizar.
+# - Gemini 429 (free tier excedido) bloqueia AV mesmo se religar
+# - Meta rate-limit em 5521993542383, cooldown horas
+# - whatsapp-inbox tem PHONE_NUMBER_ID errado (=WABA_ID em vez do real)
+# - Backups manuais existem em /home/user/nodejs/{app.js,docker-compose.yml}.bak-20260517_022014
+#   NAO APAGAR
+#
+# Round 5 REMOVE acoes destrutivas do Round 4:
+# - REMOVE watchdog /etc/cron.d/hairtech-av-watchdog (Round 4 instalou)
+# - SKIPA T2b (docker start AV) — AV intencional parado
+# - SKIPA T4 health check via docker exec (AV parado, exec falha)
+# - Vira tudo READ-ONLY: so diagnostico, zero acao em containers
+#
+# Quando voltar a religar:
+# - Dr. Ricardo: fixa Gemini billing (console.cloud.google.com)
+# - Dr. Ricardo: aguarda Meta cooldown
+# - Manus ou Dr. Ricardo: fixa PHONE_NUMBER_ID em whatsapp-inbox
+# - Dr. Ricardo: autoriza Claude (web) a religar -> commit Round 6 com T0+T2b reativados
 
 set +e
 
@@ -13,132 +30,62 @@ exec >> "$LOG" 2>&1
 REV=$(cd /home/user/nodejs && git rev-parse --short HEAD 2>/dev/null)
 echo ""
 echo "============================================================"
-echo "[$(date -Iseconds)] auto-apply.sh START rev=$REV v4"
+echo "[$(date -Iseconds)] auto-apply.sh START rev=$REV v5 (READ-ONLY / MANUS DEPLOY MODE)"
 echo "============================================================"
 
 # ---------------------------------------------------------------
-# T0 (NOVO): Watchdog AV — cron paralelo independente do auto-deploy
-# Reinicia assistente-virtual a cada 5 min se nao-running.
-# Idempotente: so instala se ainda nao existe o arquivo.
+# T0: REMOVER watchdog do Round 4 (estava restartando AV contra vontade)
 # ---------------------------------------------------------------
 WATCHDOG=/etc/cron.d/hairtech-av-watchdog
-if [ ! -f "$WATCHDOG" ]; then
-  echo "[T0] Instalando watchdog do AV em $WATCHDOG"
-  cat > "$WATCHDOG" <<'WATCHEOF'
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-*/5 * * * * root [ "$(docker inspect assistente-virtual --format '{{.State.Status}}' 2>/dev/null)" != "running" ] && (echo "[$(date -Iseconds)] AV nao-running, restartando" >> /var/log/hairtech-av-watchdog.log; docker start assistente-virtual >> /var/log/hairtech-av-watchdog.log 2>&1) || true
-WATCHEOF
-  chmod 644 "$WATCHDOG"
-  touch /var/log/hairtech-av-watchdog.log
-  chmod 640 /var/log/hairtech-av-watchdog.log
+if [ -f "$WATCHDOG" ]; then
+  echo "[T0] REMOVENDO watchdog $WATCHDOG (Round 4 instalou; Manus precisa de AV parado)"
+  rm -f "$WATCHDOG"
   systemctl restart cron 2>/dev/null || service cron restart 2>/dev/null
-  echo "[T0] Watchdog instalado e cron reiniciado"
+  echo "[T0] Watchdog removido e cron reiniciado"
 else
-  echo "[T0] Watchdog ja instalado em $WATCHDOG"
+  echo "[T0] Watchdog ja nao existe (ok)"
 fi
 
 # ---------------------------------------------------------------
-# T1: Garantir Traefik rodando
+# T1: Traefik state (READ-ONLY)
 # ---------------------------------------------------------------
 T_STATUS=$(docker inspect traefik-traefik-1 --format '{{.State.Status}}' 2>/dev/null || echo "missing")
-echo "[T1] Traefik: $T_STATUS"
-if [ "$T_STATUS" = "exited" ] || [ "$T_STATUS" = "dead" ]; then
-  echo "[T1] Traefik down — docker start..."
-  docker start traefik-traefik-1 2>&1
-  sleep 10
-fi
+echo "[T1] Traefik: $T_STATUS (read-only, sem acao)"
 
 # ---------------------------------------------------------------
-# T2: Garantir containers Web Traefik na rede 'web'
+# T2: Network check (READ-ONLY — nao conecta nada)
 # ---------------------------------------------------------------
+echo "[T2] Network check (read-only):"
 for C in openai-proxy assistente-virtual hairtech-openclaw whatsapp-inbox dashboard-frontend; do
-  EXISTS=$(docker inspect "$C" --format '{{.State.Status}}' 2>/dev/null)
-  if [ -z "$EXISTS" ]; then
-    echo "[T2] $C nao existe — pulando"
-    continue
-  fi
+  STATE=$(docker inspect "$C" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
   ON_WEB=$(docker inspect "$C" --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' 2>/dev/null | tr ' ' '\n' | grep -c '^web$')
-  if [ "$ON_WEB" = "0" ]; then
-    echo "[T2] $C NAO esta na network 'web' — conectando..."
-    docker network connect web "$C" 2>&1
-    echo "[T2] $C conectado"
-  else
-    echo "[T2] $C ja esta na network 'web'"
-  fi
+  echo "[T2]   $C state=$STATE on_web=$ON_WEB"
 done
 
 # ---------------------------------------------------------------
-# T2b: AV recovery — se nao-running, start.
+# T2b SKIPPED — AV intencional parado
 # ---------------------------------------------------------------
-echo "[T2b] AV recovery check..."
-AV_STATE=$(docker inspect assistente-virtual --format '{{.State.Status}}' 2>/dev/null)
-echo "[T2b] AV state atual: $AV_STATE"
-case "$AV_STATE" in
-  running)
-    echo "[T2b] AV running OK"
-    ;;
-  exited|dead|created|paused)
-    echo "[T2b] AV nao-running — tentando docker start..."
-    docker start assistente-virtual 2>&1
-    sleep 15
-    AV_STATE_2=$(docker inspect assistente-virtual --format '{{.State.Status}}' 2>/dev/null)
-    echo "[T2b] AV state pos-start: $AV_STATE_2"
-    if [ "$AV_STATE_2" != "running" ]; then
-      echo "[T2b] AV nao subiu — ultimos 50 linhas de log:"
-      docker logs assistente-virtual --tail 50 2>&1
-    fi
-    ;;
-  restarting)
-    echo "[T2b] AV em restart loop — aguardando 20s e verificando..."
-    sleep 20
-    AV_STATE_2=$(docker inspect assistente-virtual --format '{{.State.Status}}' 2>/dev/null)
-    echo "[T2b] AV state pos-wait: $AV_STATE_2"
-    if [ "$AV_STATE_2" != "running" ]; then
-      echo "[T2b] AV ainda em loop — ultimos 50 linhas de log:"
-      docker logs assistente-virtual --tail 50 2>&1
-    fi
-    ;;
-  "")
-    echo "[T2b] AV container nao existe — verificando docker ps -a:"
-    docker ps -a --filter name=assistente-virtual --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
-    ;;
-esac
+echo "[T2b] SKIP — AV stopped on purpose by Manus (debug Gemini 429 + Meta rate limit)"
 
 # ---------------------------------------------------------------
-# T3: Labels Traefik dos containers — diagnostico
+# T3: Labels Traefik (READ-ONLY diagnostico)
 # ---------------------------------------------------------------
-echo "[T3] Labels Traefik dos containers chave:"
-for C in openai-proxy assistente-virtual hairtech-openclaw; do
+echo "[T3] Labels Traefik:"
+for C in openai-proxy assistente-virtual hairtech-openclaw whatsapp-inbox; do
   LABELS=$(docker inspect "$C" --format '{{range $k,$v := .Config.Labels}}{{if (eq (index (split $k ".") 0) "traefik")}}{{$k}}={{$v}}{{println}}{{end}}{{end}}' 2>/dev/null)
-  if [ -z "$LABELS" ]; then
-    echo "[T3] $C — sem labels traefik"
-  else
+  if [ -n "$LABELS" ]; then
     echo "[T3] $C:"
     echo "$LABELS" | sed 's/^/[T3]     /'
   fi
 done
 
 # ---------------------------------------------------------------
-# T4: Estado interno do AV + WAHA
+# T4 SKIPPED — AV parado, docker exec falharia
 # ---------------------------------------------------------------
-KEY=$(grep "^WHATSAPP_ANA_KEY=" /home/user/nodejs/.env 2>/dev/null | cut -d= -f2-)
-if [ -n "$KEY" ]; then
-  AV_HEALTH=$(docker exec assistente-virtual wget -qO- --timeout=5 http://localhost:3001/health 2>&1 | head -c 200)
-  echo "[T4] AV /health (interno): $AV_HEALTH"
-
-  WAHA_STATUS=$(docker exec assistente-virtual wget -qO- --timeout=5 --header="X-Api-Key: $KEY" "http://whatsapp-ana:3000/api/sessions/default" 2>&1 | python3 -c "
-import json,sys
-try:
-  d=json.load(sys.stdin)
-  print(d.get('status','?'), 'me=', (d.get('me') or {}).get('id','null'), 'engine=', (d.get('engine') or {}).get('state','?'))
-except:
-  print('(parse failed)')" 2>&1)
-  echo "[T4] WAHA: $WAHA_STATUS"
-fi
+echo "[T4] SKIP — AV parado, docker exec nao funciona"
 
 # ---------------------------------------------------------------
-# T5: Smoke test publico com URLs CORRETAS
+# T5: Smoke test publico (READ-ONLY)
 # ---------------------------------------------------------------
 sleep 3
 echo "[T5] Smoke test publico:"
@@ -153,9 +100,15 @@ for URL in \
 done
 
 # ---------------------------------------------------------------
-# T6: Resumo de containers via docker ps -a
+# T6: docker ps -a (READ-ONLY)
 # ---------------------------------------------------------------
 echo "[T6] Containers (via docker ps -a):"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1 | sed 's/^/[T6] /'
 
-echo "[$(date -Iseconds)] auto-apply.sh END"
+# ---------------------------------------------------------------
+# T7 NOVO: backups manuais do Manus
+# ---------------------------------------------------------------
+echo "[T7] Backups manuais do Manus (NAO APAGAR):"
+ls -la /home/user/nodejs/*.bak-* 2>/dev/null | sed 's/^/[T7] /'
+
+echo "[$(date -Iseconds)] auto-apply.sh END (READ-ONLY mode)"
