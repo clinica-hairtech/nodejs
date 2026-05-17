@@ -1,5 +1,5 @@
 #!/bin/bash
-# auto-apply.sh v9 - Round 12: ativar 13 agentes no OpenClaw (17/05/2026)
+# auto-apply.sh v10 - Round 15: auto-arm OpenClaw (17/05/2026)
 #
 # Manus ativou OpenClaw com provider Anthropic (relatorio 21:56 UTC).
 # Esta versao adiciona T22 que copia docs/agents/*/ pra
@@ -14,7 +14,7 @@ exec >> "$LOG" 2>&1
 REV=$(git rev-parse --short HEAD 2>/dev/null)
 echo ""
 echo "============================================================"
-echo "[$(date -Iseconds)] auto-apply.sh START rev=$REV v9 (Round 12: agentes OpenClaw)"
+echo "[$(date -Iseconds)] auto-apply.sh START rev=$REV v10 (Round 15: auto-arm OpenClaw)"
 echo "============================================================"
 
 # T-1: Cron robusto (mantido)
@@ -111,6 +111,39 @@ echo "[T19] anthropic-api ja mergeado por Manus (relatorio 21:56 UTC)"
 # T20: FocusNFe check
 grep -q "^FOCUSNFE_TOKEN=" /home/user/nodejs/.env 2>/dev/null && echo "[T20] FOCUSNFE_TOKEN presente" || echo "[T20] FOCUSNFE_TOKEN ausente"
 
+# T23 (Round 15): Auto-arma OpenClaw.
+# Se o openclaw.json ja tem o provider anthropic mergeado E ha ANTHROPIC_API_KEY
+# disponivel no .env do container, cria o flag ANTHROPIC_READY automaticamente.
+# Assim o T22 abaixo sincroniza os 13 agentes e reinicia OpenClaw sem acao manual.
+echo "[T23] Auto-arm OpenClaw:"
+OC_DIR=/opt/hairtech-openclaw
+OC_FLAG=$OC_DIR/ANTHROPIC_READY.flag
+OC_CFG=$OC_DIR/openclaw.json
+if [ -f "$OC_CFG" ]; then
+  if grep -q '"anthropic-api"' "$OC_CFG" 2>/dev/null; then
+    HAS_KEY=0
+    [ -f "$OC_DIR/.env" ] && grep -q '^ANTHROPIC_API_KEY=..' "$OC_DIR/.env" && HAS_KEY=1
+    if [ "$HAS_KEY" = "0" ]; then
+      docker inspect hairtech-openclaw --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+        | grep -q '^ANTHROPIC_API_KEY=..' && HAS_KEY=1
+    fi
+    if [ "$HAS_KEY" = "1" ]; then
+      if [ ! -f "$OC_FLAG" ]; then
+        touch "$OC_FLAG"
+        echo "[T23]   provider anthropic mergeado + key presente -> ANTHROPIC_READY.flag criado"
+      else
+        echo "[T23]   ANTHROPIC_READY.flag ja existe (ok)"
+      fi
+    else
+      echo "[T23]   provider mergeado mas ANTHROPIC_API_KEY ausente no .env / container - skip"
+    fi
+  else
+    echo "[T23]   openclaw.json sem provider anthropic-api - skip"
+  fi
+else
+  echo "[T23]   $OC_CFG inexistente - skip"
+fi
+
 # T22 (NOVO Round 12): Sincronizar 13 agentes pro OpenClaw
 echo "[T22] Sync agentes OpenClaw:"
 FLAG_ANTHROPIC=/opt/hairtech-openclaw/ANTHROPIC_READY.flag
@@ -145,4 +178,4 @@ else
   echo "[T22] sem ANTHROPIC_READY.flag ou docs/agents - skip"
 fi
 
-echo "[$(date -Iseconds)] auto-apply.sh END (v9 Round 12)"
+echo "[$(date -Iseconds)] auto-apply.sh END (v10 Round 15)"
