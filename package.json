@@ -4,7 +4,8 @@
   "description": "Assistente Virtual Clinica HairTech - WhatsApp AI",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "waha:init": "node scripts/init-waha-session.js"
   },
   "dependencies": {
     "express": "^4.19.2",
