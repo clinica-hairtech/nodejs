@@ -1,0 +1,15 @@
+{
+  "id": "admin",
+  "name": "ADMIN — Cockpit Dr. Ricardo",
+  "version": "1.0",
+  "channel": {"type": "telegram", "chat_id": "8713631351"},
+  "models": {"primary": "anthropic-api/claude-sonnet-4-6", "fast": "anthropic-api/claude-haiku-4-5"},
+  "params": {"max_tokens": 2000, "temperature": 0.3},
+  "cron": {
+    "daily_morning": "0 9 * * *",
+    "daily_pulse": "0 13 * * *",
+    "daily_evening": "0 18 * * *",
+    "weekly_sunday": "0 20 * * 0"
+  },
+  "permissions": ["all"]
+}

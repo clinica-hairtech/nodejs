@@ -1,0 +1,11 @@
+{
+  "id": "crm",
+  "name": "CRM — Relacionamento",
+  "version": "1.0",
+  "channel": {"type": "whatsapp_via_av", "sender_phone": "+5521993542383"},
+  "models": {"primary": "gemini-api/gemini-2.5-flash", "fallback": "openai-api/gpt-4o-mini"},
+  "params": {"max_tokens": 500, "temperature": 0.7},
+  "cadencias": {"pos_consulta": [7, 30], "pos_fue": [90, 180, 365], "aniversario": true, "reativacao_inativo_dias": 180},
+  "escalation": {"to": "telegram:8713631351", "triggers": ["nps_menor_7", "reclamacao", "reembolso", "lgpd_exclusao"]},
+  "limits": {"msg_por_paciente_semana": 1, "horario": "09:00-19:00 BRT", "campanha_massa_requer_aprovacao": true}
+}

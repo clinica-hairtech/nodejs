@@ -1,0 +1,11 @@
+{
+  "id": "mkt",
+  "name": "MKT — Marketing",
+  "version": "1.0",
+  "channel": {"type": "telegram_proposal", "approval_chat": "8713631351"},
+  "models": {"primary": "anthropic-api/claude-sonnet-4-6"},
+  "params": {"max_tokens": 2000, "temperature": 0.8},
+  "publication": {"requires_approval": true, "never_auto_publish": true, "max_proposals_per_week": 5},
+  "escalation": {"to": "telegram:8713631351", "triggers": ["toda_publicacao", "comentario_negativo_viral", "pedido_retirada"]},
+  "compliance": {"cfm_2336_2023": true, "sem_promessa_resultado": true, "tcle_imagem_obrigatorio": true}
+}

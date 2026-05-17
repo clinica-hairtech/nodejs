@@ -1,0 +1,15 @@
+{
+  "id": "pos",
+  "name": "POS — Pós-Operatório FUE",
+  "version": "1.0",
+  "channel": {"type": "whatsapp_via_av", "sender_phone": "+5521993542383"},
+  "models": {"primary": "anthropic-api/claude-sonnet-4-6"},
+  "params": {"max_tokens": 800, "temperature": 0.5},
+  "cadencia_dias": [1, 7, 30, 90, 180, 365],
+  "escalation": {
+    "to": "telegram:8713631351",
+    "triggers_imediato": ["foto_anomala", "dor_forte", "sangramento", "febre", "suspende_medicacao"],
+    "triggers_normal": ["nps_menor_7", "sem_resposta_3_tentativas"]
+  },
+  "compliance": {"cfm_2454_2026_disclosure": true, "never_diagnoses": true, "tcle_imagem_separado": true}
+}

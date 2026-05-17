@@ -1,36 +1,49 @@
 # Workspaces dos 13 Agentes HairTech
 
-Especificações versionadas (em git) dos 13 agentes do Mestre v6.0 §7.
-Quando autorizado, `auto-apply.sh` copia esses arquivos pra `/opt/hairtech-openclaw/agents/` no VPS e restarta o orquestrador.
+Especificações versionadas dos 13 agentes do Mestre v6.0 §7.
+Quando autorizado, `auto-apply.sh` Round 12 copia esses arquivos pra `/opt/hairtech-openclaw/agents/` no VPS.
 
-## Implementados (config commitada)
+## Status (Rounds 8 + 9)
 
-| # | ID | Status SOUL | Status AGENTS | Status config |
-|---|---|---|---|---|
-| 1 | AV | ✅ | ✅ | ✅ |
-| 2 | ANA | ✅ | ✅ | ✅ |
-| 3 | MED | ⏳ Round 9 | ⏳ | ⏳ |
-| 4 | NF | ⏳ Round 9 | ⏳ | ⏳ |
-| 5 | CRM | ⏳ Round 9 | ⏳ | ⏳ |
-| 6 | MKT | ⏳ Round 9 | ⏳ | ⏳ |
-| 7 | POS | ⏳ Round 9 | ⏳ | ⏳ |
-| 8 | ADMIN | ⏳ Round 9 | ⏳ | ⏳ |
-| 9 | ESTOQUE | ⏳ Round 9 | ⏳ | ⏳ |
-| 10 | FOTO | ⏳ Round 9 | ⏳ | ⏳ |
-| 11 | FIN | ⏳ Round 9 | ⏳ | ⏳ |
-| 12 | EDU | ⏳ Round 9 | ⏳ | ⏳ |
-| 13 | COMP | ⏳ Round 9 | ⏳ | ⏳ |
+| # | ID | Status | Canal | LLM padrão | Notas |
+|---|---|---|---|---|---|
+| 1 | AV | ✅ Em produção | WhatsApp Cloud +5521993542383 | gemini-2.5-flash + gpt-4o-mini fallback | container assistente-virtual |
+| 2 | ANA | ✅ Pareada | WAHA WEBJS +5521967813366 | claude-sonnet-4-6 + gpt-4o-mini fallback | container whatsapp-ana |
+| 3 | MED | 📋 Workspace pronto | Telegram + interno | claude-opus/sonnet/haiku | Aguarda ANTHROPIC_API_KEY |
+| 4 | NF | 📋 + Código pronto | API interna /nfse | gpt-4o-mini | nfse.js modo dual auto/manual |
+| 5 | CRM | 📋 Workspace pronto | WhatsApp via AV | gemini-2.5-flash | Aguarda Feegow contratado |
+| 6 | MKT | 📋 Workspace pronto | Telegram aprovação | claude-sonnet-4-6 | Aguarda ElevenLabs+HeyGen+Instagram |
+| 7 | POS | 📋 Workspace pronto | WhatsApp via AV | claude-sonnet-4-6 | Aguarda tabela checkins_pos_op |
+| 8 | ADMIN | 📋 Workspace pronto | Telegram Dr. | claude-sonnet-4-6 | Aguarda tools dashboard |
+| 9 | ESTOQUE | 📋 Workspace pronto | Interno via ADMIN | gpt-4o-mini | Aguarda tabelas insumos* |
+| 10 | FOTO | 📋 Workspace pronto | Webhook interno | claude-sonnet-4-6 vision | Aguarda ANTHROPIC + Drive |
+| 11 | FIN | 📋 + Skeleton Round 11 | Webhook InfinityPay | gpt-4o-mini | Pix-provider agnostic |
+| 12 | EDU | 📋 Workspace pronto | Telegram Dr. | claude-sonnet-4-6 + PubMed | Aguarda ANTHROPIC |
+| 13 | COMP | 📋 Workspace pronto | Telegram Dr. | claude-sonnet-4-6 | Aguarda tabela compliance_documentos |
 
 ## Convenções
 
-- **SOUL.md**: personalidade, regras de ouro, aviso CFM, hard limits, escalação
-- **AGENTS.md**: tooling, endpoints, dependências, limitações técnicas
-- **config.json**: schema OpenClaw-friendly (id, channel, models, params, escalation, persistence, compliance)
+- **SOUL.md**: persona, regras CFM, hard limits, escalação
+- **AGENTS.md**: tooling, endpoints, dependências, schemas SQL
+- **config.json**: schema OpenClaw-friendly
 
-## Como ativar no OpenClaw (futuro Round)
+## Ativação (Round 12 auto-apply.sh)
 
-1. Validar schema com `openclaw validate docs/agents/<ID>/config.json`
-2. Copiar para `/opt/hairtech-openclaw/agents/<id>/`
-3. Adicionar entrada em `openclaw.json` -> `agents`
-4. `docker restart hairtech-openclaw`
-5. Verificar `claw.hairtech.org/api/agents` lista o novo
+1. Doctor adiciona ANTHROPIC_API_KEY em /opt/hairtech-openclaw/.env
+2. Doctor cria marker `touch /opt/hairtech-openclaw/ANTHROPIC_READY.flag`
+3. auto-apply.sh detecta: mergeia providers.anthropic-api em openclaw.json + copia docs/agents/* pra /opt/hairtech-openclaw/agents/ + restart
+4. `curl https://claw.hairtech.org/api/agents` lista 13
+
+## Ordem de ativação sugerida
+
+1. ADMIN (cockpit principal)
+2. MED (apoio clínico)
+3. POS (pacientes existentes)
+4. CRM (após Feegow)
+5. NF (após FocusNFe)
+6. FIN (após InfinityPay)
+7. ESTOQUE (após 1ª cirurgia rastreada)
+8. FOTO (após Drive estruturado)
+9. EDU (qualquer momento)
+10. COMP (qualquer momento)
+11. MKT (último, após cessão imagem/voz)

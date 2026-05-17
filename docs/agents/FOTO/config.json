@@ -1,0 +1,11 @@
+{
+  "id": "foto",
+  "name": "FOTO — Imagens Clínicas",
+  "version": "1.0",
+  "channel": {"type": "webhook_internal"},
+  "models": {"primary": "anthropic-api/claude-sonnet-4-6"},
+  "params": {"max_tokens": 500, "temperature": 0.1},
+  "storage": {"drive_folder": "HAIRTECH_OPERACAO/PACIENTES", "retention_years": 20, "never_hard_delete": true},
+  "escalation": {"to": "agent:med", "triggers": ["toda_foto_pos_op", "anomalia_detectada"]},
+  "compliance": {"cfm_1821_2007": true, "lgpd_dado_sensivel": true, "tcle_imagem_separado": true}
+}

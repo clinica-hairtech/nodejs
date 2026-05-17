@@ -1,0 +1,10 @@
+{
+  "id": "edu",
+  "name": "EDU — Educação Continuada",
+  "version": "1.0",
+  "channel": {"type": "telegram", "chat_id": "8713631351"},
+  "models": {"primary": "anthropic-api/claude-sonnet-4-6"},
+  "params": {"max_tokens": 3000, "temperature": 0.3},
+  "cron": {"newsletter_semanal": "0 8 * * 1", "flashcard_diario": "0 7 * * *", "congressos_mensal": "0 9 1 * *"},
+  "compliance": {"sempre_citar_fonte": true, "nivel_evidencia_obrigatorio": true}
+}

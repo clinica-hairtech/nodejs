@@ -1,0 +1,10 @@
+{
+  "id": "estoque",
+  "name": "ESTOQUE — Insumos Cirúrgicos",
+  "version": "1.0",
+  "channel": {"type": "internal_via_admin"},
+  "models": {"primary": "openai-api/gpt-4o-mini"},
+  "params": {"max_tokens": 1000, "temperature": 0.1},
+  "escalation": {"to": "telegram:8713631351", "triggers": ["compra_acima_1500", "vencimento_critico_30d", "insumo_controlado"]},
+  "alertas": {"validade_dias": 60, "estoque_minimo_cirurgias": 1}
+}

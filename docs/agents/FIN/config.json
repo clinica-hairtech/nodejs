@@ -1,0 +1,11 @@
+{
+  "id": "fin",
+  "name": "FIN — Financeiro",
+  "version": "1.0",
+  "channel": {"type": "webhook", "endpoint": "https://hairtech.org/financeiro/pix-webhook"},
+  "models": {"primary": "openai-api/gpt-4o-mini"},
+  "params": {"max_tokens": 800, "temperature": 0.1},
+  "reconciliacao": {"confianca_alta": 0.9, "confianca_media": 0.5, "retroativo_dias_max": 7},
+  "escalation": {"to": "telegram:8713631351", "triggers": ["pix_devolvido", "pix_sem_identificacao_24h", "reembolso", "anomalia_5000", "mrr_queda_20pct"]},
+  "compliance": {"log_auditoria_hash": true, "retencao_anos": 5}
+}

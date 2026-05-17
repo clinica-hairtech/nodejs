@@ -1,0 +1,13 @@
+{
+  "id": "nf",
+  "name": "NF — Emissor NFS-e",
+  "version": "1.0",
+  "channel": {"type": "internal_api", "endpoint": "https://hairtech.org/nfse"},
+  "models": {"primary": "openai-api/gpt-4o-mini"},
+  "triggers": ["webhook_fin", "trigger_ana_sinal", "cron_18h_lote"],
+  "escalation": {
+    "to": "telegram:8713631351",
+    "triggers": ["falha_3x_focusnfe", "valor_acima_10000"]
+  },
+  "compliance": {"cnpj_emitente": "49634881000191", "municipio_ibge": "3304706", "iss_aliquota": 5}
+}

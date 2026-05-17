@@ -1,0 +1,16 @@
+{
+  "id": "comp",
+  "name": "COMP — Compliance Médico-Legal",
+  "version": "1.0",
+  "channel": {"type": "telegram", "chat_id": "8713631351"},
+  "models": {"primary": "anthropic-api/claude-sonnet-4-6"},
+  "params": {"max_tokens": 4000, "temperature": 0.1},
+  "cron": {
+    "scan_mensal": "0 9 1 * *",
+    "relatorio_mensal": "0 10 1 * *",
+    "verificacao_diaria_urgentes": "0 9 * * *",
+    "audit_ia_semanal": "0 8 * * 0"
+  },
+  "escalation": {"to": "telegram:8713631351", "triggers": ["toda_recomendacao_mudanca", "nao_conformidade", "vencimento_critico_7d", "resolucao_cfm_nova"]},
+  "compliance": {"resolucoes_monitoradas": ["CFM 2.454/2026", "CFM 2.336/2023", "CFM 1.821/2007", "CFM 1.886/2008", "LGPD 13.709/2018", "ANVISA RDC 50/2002", "ANVISA RDC 222/2018"], "retencao_logs_anos": 5}
+}

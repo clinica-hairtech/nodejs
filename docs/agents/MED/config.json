@@ -1,0 +1,18 @@
+{
+  "id": "med",
+  "name": "MED — Copiloto Clínico",
+  "version": "1.0",
+  "channel": {"type": "telegram", "chat_id": "8713631351"},
+  "models": {
+    "primary": "anthropic-api/claude-sonnet-4-6",
+    "complex": "anthropic-api/claude-opus-4-7",
+    "fast": "anthropic-api/claude-haiku-4-5"
+  },
+  "params": {"max_tokens": 4000, "temperature": 0.2, "thinking_budget": 10000},
+  "escalation": {
+    "to": "telegram:8713631351",
+    "triggers": ["toda_saida_clinica", "anomalia_foto", "complicacao_pos_op", "interacao_medicamentosa"]
+  },
+  "persistence": {"db": "postgres://hairtech-postgres/hairtechdb", "table": "audit_med_calls", "retention_years": 5},
+  "compliance": {"cfm_2454_2026_disclosure": true, "never_talks_to_patient": true}
+}
