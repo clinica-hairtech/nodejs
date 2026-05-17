@@ -1,5 +1,6 @@
 const express = require("express");
 const axios = require("axios");
+const crypto = require("crypto");
 const SYSTEM_PROMPT = require("./systemPrompt");
 const iniciarRetomada = require("./retomada");
 const adminRouter = require("./admin");
@@ -51,6 +52,44 @@ setInterval(() => {
     db.salvarConversa(numero, conversas[numero]).catch(() => {});
   }
 }, 2 * 60 * 1000);
+
+
+// ============================================================
+// CFM 2.454/2026 — Disclosure obrigatorio + Audit log
+// ============================================================
+const CFM_DISCLOSURE_TEXT = "Ola! Sou o assistente virtual da Clinica HairTech / Dr. Ricardo Meireles Marcelino (CRM-RJ). Este atendimento inicial e conduzido por inteligencia artificial supervisionada pelo Dr. Ricardo, com finalidade de agendamento, esclarecimento de duvidas comerciais e triagem administrativa (risco baixo, conforme Resolucao CFM 2.454/2026). Qualquer duvida clinica, diagnostico ou conduta medica sera respondida diretamente pelo Dr. Ricardo em consulta. Seus dados sao tratados conforme a LGPD. Se preferir falar diretamente com um humano, responda HUMANO a qualquer momento. Ao continuar, voce confirma que recebeu essa informacao.";
+
+async function enviarDisclosureSeNovo(from) {
+  const c = conversas[from];
+  if (!c || c.disclosureEnviado) return;
+  try {
+    await enviarMensagem(from, CFM_DISCLOSURE_TEXT);
+    c.disclosureEnviado = true;
+    c.disclosureTs = Date.now();
+    c.disclosureHash = crypto.createHash("sha256").update(CFM_DISCLOSURE_TEXT).digest("hex");
+    db.salvarConversa(from, c).catch(() => {});
+    if (db.pool) {
+      db.pool.query(
+        "INSERT INTO audit_ai_calls (agente, model, prompt_hash, response_hash, tokens, ts) VALUES ($1,$2,$3,$4,$5,NOW())",
+        ["disclosure_cfm", "n/a", c.disclosureHash, "", 0]
+      ).catch(() => {});
+    }
+  } catch (e) {
+    console.error("[CFM] disclosure falhou:", e.message);
+  }
+}
+
+async function logAuditAI(agente, model, prompt, response, tokens) {
+  if (!db.pool) return;
+  try {
+    const promptHash = crypto.createHash("sha256").update(JSON.stringify(prompt || "")).digest("hex").substring(0, 32);
+    const respHash = crypto.createHash("sha256").update(JSON.stringify(response || "")).digest("hex").substring(0, 32);
+    await db.pool.query(
+      "INSERT INTO audit_ai_calls (agente, model, prompt_hash, response_hash, tokens, ts) VALUES ($1,$2,$3,$4,$5,NOW())",
+      [agente || "AV", model || "unknown", promptHash, respHash, tokens || 0]
+    );
+  } catch (_) {}
+}
 
 // ==========================
 // COMANDOS DO DONO (via WhatsApp)
@@ -497,9 +536,12 @@ app.post("/webhook", async (req, res) => {
         temperatura: "frio",
         genero: null,
         nome: null,
-        nota: null
+        nota: null,
+        disclosureEnviado: false
       };
     }
+    // CFM 2.454/2026: envia disclosure na 1a mensagem
+    await enviarDisclosureSeNovo(from);
 
     const c = conversas[from];
 
@@ -766,8 +808,13 @@ async function chamarIA(model, systemPrompt, historico, opts = {}) {
 // (429 quota, network, billing, downtime, etc.) — para AV continuar respondendo
 // sem precisar Dr. Ricardo trocar nada manualmente.
 async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
+  const agente = opts.agente || "AV";
+  let modelUsed = AI_MODEL;
+  let resp;
   try {
-    return await chamarIA(AI_MODEL, systemPrompt, historico, opts);
+    resp = await chamarIA(AI_MODEL, systemPrompt, historico, opts);
+    logAuditAI(agente, modelUsed, historico, resp, 0).catch(() => {});
+    return resp;
   } catch (e) {
     const status = e.response?.status;
     console.warn(`[AI] ${AI_MODEL} falhou (status=${status} code=${e.code}): ${e.message}`);
@@ -777,8 +824,10 @@ async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
     }
   }
   try {
-    const resp = await chamarIA("gpt-4o-mini", systemPrompt, historico, opts);
+    modelUsed = "gpt-4o-mini";
+    resp = await chamarIA(modelUsed, systemPrompt, historico, opts);
     console.log("[AI] Resposta via fallback OpenAI gpt-4o-mini");
+    logAuditAI(agente, modelUsed, historico, resp, 0).catch(() => {});
     return resp;
   } catch (e) {
     console.error("[AI] Fallback OpenAI tambem falhou:", e.response?.data || e.message);
@@ -1154,6 +1203,28 @@ app.get("/diagnostico", async (req, res) => {
   res.json({ ...resultado, status: tudo_ok ? "TUDO OK" : "PROBLEMAS ENCONTRADOS" });
 });
 
+
+// /admin/audit?senha= - export CSV ultimos 30 dias (CFM 2.454/2026 5 anos retencao)
+app.get("/admin/audit", async (req, res) => {
+  if (req.query.senha !== ADMIN_PASS) return res.status(401).send("Nao autorizado");
+  if (!db.pool) return res.status(503).send("DB nao configurado");
+  try {
+    const r = await db.pool.query(
+      "SELECT id, agente, model, prompt_hash, response_hash, tokens, ts FROM audit_ai_calls WHERE ts > NOW() - INTERVAL '30 days' ORDER BY ts DESC"
+    );
+    const rows = r.rows;
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=audit_ai_calls.csv");
+    res.write("id,agente,model,prompt_hash,response_hash,tokens,ts\n");
+    for (const row of rows) {
+      res.write(`${row.id},${row.agente},${row.model},${row.prompt_hash},${row.response_hash},${row.tokens},${row.ts.toISOString()}\n`);
+    }
+    res.end();
+  } catch (e) {
+    res.status(500).send("Erro: " + e.message);
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 // ==========================
@@ -1201,7 +1272,7 @@ async function responderAna(chatId, mensagem) {
     const reply = await chamarIAComFallback(
       ANA_SYSTEM_PROMPT,
       c.historico,
-      { maxTokens: 1000, temperature: 0.7 }
+      { maxTokens: 1000, temperature: 0.7, agente: "ANA" }
     );
     c.historico.push({ role: "assistant", content: reply });
     return reply;
