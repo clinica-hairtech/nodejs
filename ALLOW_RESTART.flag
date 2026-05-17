@@ -1,0 +1,11 @@
+ALLOW_RESTART.flag criado em 17/05/2026
+Autorizado por Dr. Ricardo apos Gemini billing pago.
+
+Quando este arquivo existe em /home/user/nodejs/ALLOW_RESTART.flag,
+auto-apply.sh v8+ (T18) executa:
+  docker start assistente-virtual
+  docker start whatsapp-inbox
+  docker start hairtech-operator-bridge
+
+Para parar restart automatico no futuro: deletar este arquivo via commit
+(git rm ALLOW_RESTART.flag) ou via SSH no VPS (rm /home/user/nodejs/ALLOW_RESTART.flag).
