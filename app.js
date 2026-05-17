@@ -24,8 +24,8 @@ const GEMINI_API_KEY   = process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY   = process.env.OPENAI_API_KEY || "";
 const AI_MODEL         = "gemini-2.5-flash";
 const AI_BASE_URL      = "https://generativelanguage.googleapis.com/v1beta/openai";
-const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
-const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521967813366";
+const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521982006372";
+const OWNER_PHONE      = process.env.OWNER_PHONE  || "5521982006372";
 const ADMIN_PASS       = process.env.ADMIN_PASS || "hairtech2026";
 
 // Estado global das conversas (carregado do banco na inicialização)
@@ -805,8 +805,6 @@ async function chamarIA(model, systemPrompt, historico, opts = {}) {
 }
 
 // Try Gemini first, fallback to OpenAI gpt-4o-mini on failure
-// (429 quota, network, billing, downtime, etc.) — para AV continuar respondendo
-// sem precisar Dr. Ricardo trocar nada manualmente.
 async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
   const agente = opts.agente || "AV";
   let modelUsed = AI_MODEL;
@@ -1265,6 +1263,10 @@ const WAHA_KEY = process.env.WHATSAPP_ANA_KEY || "";
 async function responderAna(chatId, mensagem) {
   if (!conversasAna[chatId]) conversasAna[chatId] = { historico: [] };
   const c = conversasAna[chatId];
+  if (c.pausado) {
+    console.log(`[ANA] ${chatId} pausado pelo dono — nao respondendo`);
+    return null;
+  }
   c.historico.push({ role: "user", content: mensagem });
   if (c.historico.length > 20) c.historico = c.historico.slice(-20);
 
@@ -1279,6 +1281,101 @@ async function responderAna(chatId, mensagem) {
   } catch (e) {
     console.error("[ANA] Erro IA:", e.message);
     return "Desculpa, tive um problema tecnico agora. Pode mandar de novo?";
+  }
+}
+
+// Comandos do dono via WhatsApp da ANA (Dr. Ricardo manda do pessoal pra ANA)
+async function processarComandoAna(chatId, texto) {
+  const t = texto.trim();
+  const lower = t.toLowerCase();
+
+  if (lower === "/ajuda" || lower === "ajuda") {
+    return "*ANA - modo dono*\n\n" +
+      "/status - resumo ANA\n" +
+      "/listar - lista conversas ANA ativas\n" +
+      "/historico [chatId] - ultimas 10 msgs de um chat\n" +
+      "/pausar [chatId] - pausa ANA pra esse chat\n" +
+      "/retomar [chatId] - retoma ANA pra esse chat\n" +
+      "/msg [chatId] [texto] - envia como ANA\n" +
+      "/limpar [chatId] - limpa historico\n\n" +
+      "Ou fale natural: \"quem ta esperando resposta?\" / \"manda X pra Fulana\"";
+  }
+
+  if (lower === "/status" || lower === "status") {
+    const total = Object.keys(conversasAna).length;
+    const pausados = Object.values(conversasAna).filter(c => c.pausado).length;
+    const msgs = Object.values(conversasAna).reduce((s, c) => s + (c.historico||[]).length, 0);
+    return `*ANA - Status*\nConversas: ${total}\nPausadas: ${pausados}\nTotal msgs: ${msgs}`;
+  }
+
+  if (lower === "/listar" || lower === "listar") {
+    const chats = Object.entries(conversasAna);
+    if (chats.length === 0) return "Nenhuma conversa ANA ativa.";
+    const lista = chats.map(([cid, c], i) => {
+      const ultima = (c.historico && c.historico.length) ? c.historico[c.historico.length-1].content.substring(0,60) : "-";
+      const flag = c.pausado ? " [PAUSADO]" : "";
+      return `${i+1}. ${cid}${flag}\nUltima: ${ultima}`;
+    }).join("\n\n");
+    return `*Conversas ANA* (${chats.length})\n\n${lista}`;
+  }
+
+  if (lower.startsWith("/historico ")) {
+    const cid = t.substring(11).trim();
+    const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
+    const c = conversasAna[cidFinal];
+    if (!c || !c.historico || c.historico.length === 0) return `Sem historico para ${cidFinal}.`;
+    const hist = c.historico.slice(-10).map(m => `[${m.role}] ${m.content.substring(0,150)}`).join("\n---\n");
+    return `*${cidFinal}* (ultimas 10)\n\n${hist}`;
+  }
+
+  if (lower.startsWith("/msg ")) {
+    const partes = t.substring(5).trim().split(/\s+/);
+    const cid = partes[0];
+    const msg = partes.slice(1).join(" ");
+    if (!cid || !msg) return "Uso: /msg [chatId] [texto]";
+    const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
+    await enviarMsgAna(cidFinal, msg);
+    if (!conversasAna[cidFinal]) conversasAna[cidFinal] = { historico: [] };
+    conversasAna[cidFinal].historico.push({ role: "assistant", content: msg });
+    return `Enviado pra ${cidFinal}.`;
+  }
+
+  if (lower.startsWith("/pausar ")) {
+    const cid = t.substring(8).trim();
+    const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
+    if (!conversasAna[cidFinal]) conversasAna[cidFinal] = { historico: [] };
+    conversasAna[cidFinal].pausado = true;
+    return `ANA pausada para ${cidFinal}.`;
+  }
+
+  if (lower.startsWith("/retomar ")) {
+    const cid = t.substring(9).trim();
+    const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
+    if (conversasAna[cidFinal]) conversasAna[cidFinal].pausado = false;
+    return `ANA retomada para ${cidFinal}.`;
+  }
+
+  if (lower.startsWith("/limpar ")) {
+    const cid = t.substring(8).trim();
+    const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
+    if (conversasAna[cidFinal]) conversasAna[cidFinal].historico = [];
+    return `Historico limpo: ${cidFinal}.`;
+  }
+
+  // Linguagem natural - IA interpreta
+  try {
+    const snap = {
+      total: Object.keys(conversasAna).length,
+      pausadas: Object.values(conversasAna).filter(c => c.pausado).length
+    };
+    const reply = await chamarIAComFallback(
+      `Voce e copiloto da ANA (bot de vendas FUE da Clinica HairTech). Dr. Ricardo te falou: "${t}". Estado ANA: ${JSON.stringify(snap)}. Comandos disponiveis: /status /listar /historico [chatId] /pausar [chatId] /retomar [chatId] /msg [chatId] [texto] /limpar [chatId] /ajuda. Responda direto e curto. Se for pedido de acao, sugira o comando exato.`,
+      [{ role: "user", content: t }],
+      { agente: "ANA_OWNER", maxTokens: 300 }
+    );
+    return reply;
+  } catch (e) {
+    return "Erro IA. Use /ajuda para comandos.";
   }
 }
 
@@ -1313,11 +1410,29 @@ app.post("/webhook/ana", async (req, res) => {
       return res.sendStatus(200);
     }
 
+    // Deteccao do dono (Dr. Ricardo mandando do pessoal pra ANA)
+    const cleanId = chatId.replace(/[^0-9]/g, "");
+    const ownerClean = (OWNER_PHONE || "").replace(/[^0-9]/g, "");
+    const isOwner = ownerClean && cleanId === ownerClean;
+
+    if (isOwner) {
+      console.log(`[ANA-OWNER] cmd de ${chatId}: ${text.slice(0, 80)}`);
+      res.sendStatus(200);
+      try {
+        const reply = await processarComandoAna(chatId, text);
+        if (reply) await enviarMsgAna(chatId, reply);
+      } catch (e) {
+        console.error("[ANA-OWNER] erro:", e.message);
+        await enviarMsgAna(chatId, "Erro processando comando: " + e.message);
+      }
+      return;
+    }
+
     console.log(`[ANA] msg de ${chatId}: ${text.slice(0, 80)}`);
     res.sendStatus(200);
 
     const resposta = await responderAna(chatId, text);
-    await enviarMsgAna(chatId, resposta);
+    if (resposta) await enviarMsgAna(chatId, resposta);
   } catch (e) {
     console.error("[ANA webhook]", e.message);
     if (!res.headersSent) res.sendStatus(200);
