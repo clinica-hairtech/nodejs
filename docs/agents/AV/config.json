@@ -1,0 +1,32 @@
+{
+  "id": "av",
+  "name": "Assistente Virtual HairTech",
+  "version": "3.0",
+  "channel": {
+    "type": "whatsapp_cloud_api",
+    "phone_number_id": "983992428140920",
+    "display_number": "+5521993542383"
+  },
+  "models": {
+    "primary": "gemini-api/gemini-2.5-flash",
+    "fallback": "openai-api/gpt-4o-mini"
+  },
+  "params": {
+    "max_tokens": 1500,
+    "temperature": 0.6,
+    "history_window": 20
+  },
+  "escalation": {
+    "to": "telegram:8713631351",
+    "triggers": ["orcamento>8500", "queixa_clinica", "pedido_humano", "reclamacao", "menor_idade"]
+  },
+  "persistence": {
+    "db": "postgres://hairtech-postgres/hairtechdb",
+    "snapshot_interval_min": 2
+  },
+  "compliance": {
+    "cfm_2454_2026_disclosure": true,
+    "lgpd_consent_required": true,
+    "audit_log_years": 5
+  }
+}
