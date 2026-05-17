@@ -1,26 +1,17 @@
 #!/bin/bash
-# auto-apply.sh v5 — MANUS DEPLOY MODE (17/05/2026 madrugada)
+# auto-apply.sh v6 — Cron robusto a conflitos locais (17/05/2026)
 #
-# CONTEXTO CRITICO (briefing Manus 23:27 BRT):
-# - AV, whatsapp-ana, whatsapp-inbox, hairtech-operator-bridge PARADOS
-#   INTENCIONALMENTE pra debug. NAO RELIGAR ATE Manus/Dr. Ricardo autorizar.
-# - Gemini 429 (free tier excedido) bloqueia AV mesmo se religar
-# - Meta rate-limit em 5521993542383, cooldown horas
-# - whatsapp-inbox tem PHONE_NUMBER_ID errado (=WABA_ID em vez do real)
-# - Backups manuais existem em /home/user/nodejs/{app.js,docker-compose.yml}.bak-20260517_022014
-#   NAO APAGAR
+# Manus reportou: Round 3+4 nao aplicaram porque cron usava git pull --ff-only
+# que falha silenciosamente quando ha modificacoes locais. Manus fez
+# git reset --hard manual pra forcar Round 5.
 #
-# Round 5 REMOVE acoes destrutivas do Round 4:
-# - REMOVE watchdog /etc/cron.d/hairtech-av-watchdog (Round 4 instalou)
-# - SKIPA T2b (docker start AV) — AV intencional parado
-# - SKIPA T4 health check via docker exec (AV parado, exec falha)
-# - Vira tudo READ-ONLY: so diagnostico, zero acao em containers
+# Round 6 atualiza o cron pra usar git reset --hard origin/branch (sobrescreve
+# locais). Custo: edicoes manuais de Manus em /home/user/nodejs/* serao
+# perdidas no proximo tick. Beneficio: bridge nunca mais trava.
+# Untracked files (.bak-*, public/, etc.) NAO sao tocados por reset --hard.
 #
-# Quando voltar a religar:
-# - Dr. Ricardo: fixa Gemini billing (console.cloud.google.com)
-# - Dr. Ricardo: aguarda Meta cooldown
-# - Manus ou Dr. Ricardo: fixa PHONE_NUMBER_ID em whatsapp-inbox
-# - Dr. Ricardo: autoriza Claude (web) a religar -> commit Round 6 com T0+T2b reativados
+# Mantem MODO READ-ONLY: T2b ainda skipa start AV, watchdog nao instalado.
+# Aguardando Dr. Ricardo acordar e autorizar restart.
 
 set +e
 
@@ -30,45 +21,66 @@ exec >> "$LOG" 2>&1
 REV=$(cd /home/user/nodejs && git rev-parse --short HEAD 2>/dev/null)
 echo ""
 echo "============================================================"
-echo "[$(date -Iseconds)] auto-apply.sh START rev=$REV v5 (READ-ONLY / MANUS DEPLOY MODE)"
+echo "[$(date -Iseconds)] auto-apply.sh START rev=$REV v6 (READ-ONLY + cron robusto)"
 echo "============================================================"
 
 # ---------------------------------------------------------------
-# T0: REMOVER watchdog do Round 4 (estava restartando AV contra vontade)
+# T-1 (NOVO): Atualizar cron pra usar git reset --hard (idempotente)
+# ---------------------------------------------------------------
+CRON=/etc/cron.d/hairtech-autodeploy
+if [ -f "$CRON" ] && grep -q "git pull --ff-only" "$CRON"; then
+  echo "[T-1] Cron usa git pull --ff-only — atualizando pra git reset --hard"
+  cat > "$CRON" <<'CRONEOF'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+*/2 * * * * root cd /home/user/nodejs && git fetch origin claude/hairtech-whatsapp-ai-liD5V --quiet 2>&1 && [ "$(git rev-parse HEAD 2>/dev/null)" != "$(git rev-parse origin/claude/hairtech-whatsapp-ai-liD5V 2>/dev/null)" ] && echo "[$(date -Iseconds)] commit novo, aplicando via reset --hard" >> /var/log/hairtech-autodeploy.log && git reset --hard origin/claude/hairtech-whatsapp-ai-liD5V --quiet >> /var/log/hairtech-autodeploy.log 2>&1 && bash /home/user/nodejs/auto-apply.sh >> /var/log/hairtech-autodeploy.log 2>&1
+CRONEOF
+  chmod 644 "$CRON"
+  systemctl restart cron 2>/dev/null || service cron restart 2>/dev/null
+  echo "[T-1] Cron atualizado pra git reset --hard"
+elif grep -q "git reset --hard origin" "$CRON" 2>/dev/null; then
+  echo "[T-1] Cron ja usa git reset --hard (ok)"
+else
+  echo "[T-1] AVISO: cron $CRON nao tem padrao esperado:"
+  cat "$CRON" 2>&1 | sed 's/^/[T-1]   /'
+fi
+
+# ---------------------------------------------------------------
+# T0: Garantir watchdog AV REMOVIDO (Round 4 instalou; Round 5 removeu;
+#     defesa em profundidade pra caso volte por acidente)
 # ---------------------------------------------------------------
 WATCHDOG=/etc/cron.d/hairtech-av-watchdog
 if [ -f "$WATCHDOG" ]; then
-  echo "[T0] REMOVENDO watchdog $WATCHDOG (Round 4 instalou; Manus precisa de AV parado)"
+  echo "[T0] Watchdog ressurgiu — removendo de novo"
   rm -f "$WATCHDOG"
   systemctl restart cron 2>/dev/null || service cron restart 2>/dev/null
-  echo "[T0] Watchdog removido e cron reiniciado"
 else
-  echo "[T0] Watchdog ja nao existe (ok)"
+  echo "[T0] Watchdog ausente (ok)"
 fi
 
 # ---------------------------------------------------------------
 # T1: Traefik state (READ-ONLY)
 # ---------------------------------------------------------------
 T_STATUS=$(docker inspect traefik-traefik-1 --format '{{.State.Status}}' 2>/dev/null || echo "missing")
-echo "[T1] Traefik: $T_STATUS (read-only, sem acao)"
+echo "[T1] Traefik: $T_STATUS"
 
 # ---------------------------------------------------------------
-# T2: Network check (READ-ONLY — nao conecta nada)
+# T2: Network check (READ-ONLY)
 # ---------------------------------------------------------------
-echo "[T2] Network check (read-only):"
-for C in openai-proxy assistente-virtual hairtech-openclaw whatsapp-inbox dashboard-frontend; do
+echo "[T2] Network check:"
+for C in openai-proxy assistente-virtual hairtech-openclaw whatsapp-inbox dashboard-frontend whatsapp-ana; do
   STATE=$(docker inspect "$C" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
   ON_WEB=$(docker inspect "$C" --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' 2>/dev/null | tr ' ' '\n' | grep -c '^web$')
   echo "[T2]   $C state=$STATE on_web=$ON_WEB"
 done
 
 # ---------------------------------------------------------------
-# T2b SKIPPED — AV intencional parado
+# T2b SKIPPED — AV intencional parado (aguardando Dr. Ricardo)
 # ---------------------------------------------------------------
-echo "[T2b] SKIP — AV stopped on purpose by Manus (debug Gemini 429 + Meta rate limit)"
+echo "[T2b] SKIP — modo READ-ONLY ate Dr. Ricardo autorizar restart"
 
 # ---------------------------------------------------------------
-# T3: Labels Traefik (READ-ONLY diagnostico)
+# T3: Labels Traefik (READ-ONLY)
 # ---------------------------------------------------------------
 echo "[T3] Labels Traefik:"
 for C in openai-proxy assistente-virtual hairtech-openclaw whatsapp-inbox; do
@@ -80,9 +92,9 @@ for C in openai-proxy assistente-virtual hairtech-openclaw whatsapp-inbox; do
 done
 
 # ---------------------------------------------------------------
-# T4 SKIPPED — AV parado, docker exec falharia
+# T4 SKIPPED
 # ---------------------------------------------------------------
-echo "[T4] SKIP — AV parado, docker exec nao funciona"
+echo "[T4] SKIP — AV parado"
 
 # ---------------------------------------------------------------
 # T5: Smoke test publico (READ-ONLY)
@@ -100,15 +112,15 @@ for URL in \
 done
 
 # ---------------------------------------------------------------
-# T6: docker ps -a (READ-ONLY)
+# T6: docker ps -a
 # ---------------------------------------------------------------
-echo "[T6] Containers (via docker ps -a):"
+echo "[T6] Containers (docker ps -a):"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1 | sed 's/^/[T6] /'
 
 # ---------------------------------------------------------------
-# T7 NOVO: backups manuais do Manus
+# T7: backups manuais Manus
 # ---------------------------------------------------------------
-echo "[T7] Backups manuais do Manus (NAO APAGAR):"
+echo "[T7] Backups manuais (nao apagar):"
 ls -la /home/user/nodejs/*.bak-* 2>/dev/null | sed 's/^/[T7] /'
 
-echo "[$(date -Iseconds)] auto-apply.sh END (READ-ONLY mode)"
+echo "[$(date -Iseconds)] auto-apply.sh END (READ-ONLY mode v6)"
