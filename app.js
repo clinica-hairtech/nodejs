@@ -20,6 +20,7 @@ const VERIFY_TOKEN     = process.env.VERIFY_TOKEN;
 const WHATSAPP_TOKEN   = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID  = process.env.PHONE_NUMBER_ID;
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY;
+const OPENAI_API_KEY   = process.env.OPENAI_API_KEY || "";
 const AI_MODEL         = "gemini-2.5-flash";
 const AI_BASE_URL      = "https://generativelanguage.googleapis.com/v1beta/openai";
 const NOTIFY_PHONE     = process.env.NOTIFY_PHONE || "5521967813366";
@@ -732,27 +733,57 @@ async function processarResposta(from, resposta) {
 // ==========================
 // RESPOSTA DA IA
 // ==========================
-async function chamarIA(model, historico) {
+async function chamarIA(model, systemPrompt, historico, opts = {}) {
+  const isOpenAI = !model.startsWith("gemini-");
+  const url = isOpenAI
+    ? "https://api.openai.com/v1/chat/completions"
+    : `${AI_BASE_URL}/chat/completions`;
+  const key = isOpenAI ? OPENAI_API_KEY : GEMINI_API_KEY;
+  if (!key) throw new Error(`API key missing for ${isOpenAI ? "OpenAI" : "Gemini"}`);
+
+  const histArr = historico.map(m => ({ role: m.role, content: m.content }));
+  const messages = systemPrompt
+    ? [{ role: "system", content: systemPrompt }, ...histArr]
+    : histArr;
+
   const resp = await axios.post(
-    `${AI_BASE_URL}/chat/completions`,
+    url,
     {
       model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        ...historico.map(m => ({ role: m.role, content: m.content }))
-      ],
-      max_tokens: 1500,
-      temperature: 0.6
+      messages,
+      max_tokens: opts.maxTokens || 1500,
+      temperature: opts.temperature !== undefined ? opts.temperature : 0.6
     },
     {
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      timeout: 25000
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      timeout: opts.timeout || 25000
     }
   );
   return resp.data.choices[0].message.content;
+}
+
+// Try Gemini first, fallback to OpenAI gpt-4o-mini on failure
+// (429 quota, network, billing, downtime, etc.) — para AV continuar respondendo
+// sem precisar Dr. Ricardo trocar nada manualmente.
+async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
+  try {
+    return await chamarIA(AI_MODEL, systemPrompt, historico, opts);
+  } catch (e) {
+    const status = e.response?.status;
+    console.warn(`[AI] ${AI_MODEL} falhou (status=${status} code=${e.code}): ${e.message}`);
+    if (!OPENAI_API_KEY) {
+      console.warn("[AI] OPENAI_API_KEY ausente no .env -- sem fallback");
+      throw e;
+    }
+  }
+  try {
+    const resp = await chamarIA("gpt-4o-mini", systemPrompt, historico, opts);
+    console.log("[AI] Resposta via fallback OpenAI gpt-4o-mini");
+    return resp;
+  } catch (e) {
+    console.error("[AI] Fallback OpenAI tambem falhou:", e.response?.data || e.message);
+    throw e;
+  }
 }
 
 async function obterRespostaIA(numero, mensagem) {
@@ -760,22 +791,12 @@ async function obterRespostaIA(numero, mensagem) {
   c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
   if (c.historico.length > 20) c.historico = c.historico.slice(-20);
 
-  // Tenta GPT-4o-mini primeiro, cai para Claude Haiku se falhar
   try {
-    const aiResp = await chamarIA(AI_MODEL, c.historico);
+    const aiResp = await chamarIAComFallback(SYSTEM_PROMPT, c.historico);
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
     return aiResp;
   } catch (e) {
-    console.warn("Gemini 2.0 falhou, tentando Gemini 1.5:", e.message);
-  }
-
-  try {
-    const aiResp = await chamarIA("gemini-2.5-flash", c.historico);
-    c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
-    console.log("Resposta via Gemini 1.5 (fallback)");
-    return aiResp;
-  } catch (e) {
-    console.error("Fallback também falhou:", e.response?.data || e.message);
+    console.error("[AI] Todas tentativas falharam:", e.message);
     return "Desculpa, tive uma dificuldade técnica agora. Pode repetir sua mensagem?";
   }
 }
@@ -1177,30 +1198,15 @@ async function responderAna(chatId, mensagem) {
   if (c.historico.length > 20) c.historico = c.historico.slice(-20);
 
   try {
-    const resp = await axios.post(
-      `${AI_BASE_URL}/chat/completions`,
-      {
-        model: AI_MODEL,
-        messages: [
-          { role: "system", content: ANA_SYSTEM_PROMPT },
-          ...c.historico.map(m => ({ role: m.role, content: m.content }))
-        ],
-        max_tokens: 1000,
-        temperature: 0.7
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${GEMINI_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 25000
-      }
+    const reply = await chamarIAComFallback(
+      ANA_SYSTEM_PROMPT,
+      c.historico,
+      { maxTokens: 1000, temperature: 0.7 }
     );
-    const reply = resp.data.choices[0].message.content;
     c.historico.push({ role: "assistant", content: reply });
     return reply;
   } catch (e) {
-    console.error("[ANA] Erro IA:", e.response?.data || e.message);
+    console.error("[ANA] Erro IA:", e.message);
     return "Desculpa, tive um problema tecnico agora. Pode mandar de novo?";
   }
 }
