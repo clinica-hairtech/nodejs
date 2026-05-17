@@ -100,35 +100,21 @@ async function processarComando(texto) {
 
   const responder = (msg) => enviarMensagem(OWNER_PHONE, msg);
 
-  // /ajuda
   if (lower === "/ajuda" || lower === "ajuda") {
     return responder(
       "*Comandos — HairTech*\n\n" +
-      "Você pode escrever em linguagem natural ou usar os atalhos:\n\n" +
       "*/status* — resumo das conversas\n" +
       "*/relatorio* — relatório da semana\n" +
-      "*/listar [todos|quentes|mornos|inativos|semresposta]* — ver lista de contatos\n" +
+      "*/listar [todos|quentes|mornos|inativos|semresposta]*\n" +
       "*/fimdesemana [msg]* — retomar quem mandou no fim de semana\n" +
-      "*/todos [msg]* — enviar para todos os ativos\n" +
-      "*/quentes [msg]* — enviar para leads quentes\n" +
-      "*/mornos [msg]* — enviar para leads mornos\n" +
-      "*/semresposta [msg]* — quem ainda nao respondeu\n" +
-      "*/inativos [msg]* — inativos ha mais de 48h\n" +
-      "*/msg [numero] [texto]* — mensagem direta\n" +
-      "*/pausar [numero]* — pausar bot\n" +
-      "*/retomar [numero]* — retomar bot\n" +
-      "*!exec [comando]* — executa comando no servidor\n\n" +
-      "*Resgate diario (todo dia 10h voce recebe automaticamente):*\n" +
-      "*aprovar [numero]* — envia a sugestao gerada para o lead\n" +
-      "*enviar [numero] [mensagem]* — envia mensagem personalizada\n\n" +
-      "Ou fale naturalmente:\n" +
-      "_Mande uma mensagem pros leads quentes sobre a promocao de hoje_\n" +
-      "_Quantos leads temos agora?_\n" +
-      "_Retoma quem mandou no final de semana_"
+      "*/todos [msg]* / */quentes [msg]* / */mornos [msg]*\n" +
+      "*/semresposta [msg]* / */inativos [msg]*\n" +
+      "*/msg [numero] [texto]* / */pausar [numero]* / */retomar [numero]*\n" +
+      "*!exec [comando]* — executa comando no servidor\n" +
+      "*aprovar [numero]* / *enviar [numero] [mensagem]*"
     );
   }
 
-  // /relatorio — sob demanda
   if (lower === "/relatorio" || lower === "relatorio") {
     try {
       const rel = await iniciarRelatorio.gerarRelatorio(conversas);
@@ -138,7 +124,6 @@ async function processarComando(texto) {
     }
   }
 
-  // /status
   if (lower === "/status" || lower === "status") {
     const total   = Object.keys(conversas).length;
     const ativos  = Object.values(conversas).filter(c => c.status === "ativo").length;
@@ -152,17 +137,11 @@ async function processarComando(texto) {
     }).length;
     return responder(
       `*HairTech — Status atual*\n\n` +
-      `Total de conversas: ${total}\n` +
-      `Bot ativo: ${ativos}\n` +
-      `Com humano: ${humanos}\n\n` +
-      `Leads quentes: ${quentes}\n` +
-      `Leads mornos: ${mornos}\n` +
-      `Leads frios: ${frios}\n` +
-      `Aguardando resposta: ${semResp}`
+      `Total de conversas: ${total}\nBot ativo: ${ativos}\nCom humano: ${humanos}\n\n` +
+      `Leads quentes: ${quentes}\nLeads mornos: ${mornos}\nLeads frios: ${frios}\nAguardando resposta: ${semResp}`
     );
   }
 
-  // /pausar [número]
   if (lower.startsWith("/pausar ")) {
     const numero = t.substring(8).trim().replace(/\D/g, "");
     if (conversas[numero]) {
@@ -174,7 +153,6 @@ async function processarComando(texto) {
     return responder(`Número +${numero} não encontrado.`);
   }
 
-  // /retomar [número]
   if (lower.startsWith("/retomar ")) {
     const numero = t.substring(9).trim().replace(/\D/g, "");
     if (conversas[numero]) {
@@ -185,7 +163,6 @@ async function processarComando(texto) {
     return responder(`Número +${numero} não encontrado.`);
   }
 
-  // /msg [número] [texto]
   if (lower.startsWith("/msg ")) {
     const partes = t.substring(5).trim().split(" ");
     const numero = partes[0].replace(/\D/g, "");
@@ -199,7 +176,6 @@ async function processarComando(texto) {
     return responder(`Mensagem enviada para +${numero}.`);
   }
 
-  // aprovar [número] — envia a sugestão gerada pelo resgate diário
   if (lower.startsWith("aprovar ")) {
     const numero = t.substring(8).trim().replace(/\D/g, "");
     const sugestao = getSugestao(numero);
@@ -213,12 +189,11 @@ async function processarComando(texto) {
     return responder(`Sugestão enviada para +${numero}.`);
   }
 
-  // enviar [número] [mensagem] — envia mensagem personalizada para lead
   if (lower.startsWith("enviar ")) {
     const partes = t.substring(7).trim().split(" ");
     const numero = partes[0].replace(/\D/g, "");
     const mensagem = partes.slice(1).join(" ");
-    if (!numero || !mensagem) return responder("Uso: enviar [número] [mensagem]\nOu: aprovar [número] para enviar a sugestão.");
+    if (!numero || !mensagem) return responder("Uso: enviar [número] [mensagem]");
     await enviarMensagem(numero, mensagem);
     if (conversas[numero]) {
       conversas[numero].historico.push({ role: "assistant", content: mensagem, ts: Date.now() });
@@ -228,7 +203,6 @@ async function processarComando(texto) {
     return responder(`Mensagem enviada para +${numero}.`);
   }
 
-  // Funções de envio em massa
   async function enviarEmMassa(filtro, mensagem) {
     const alvos = Object.entries(conversas).filter(([, c]) => filtro(c));
     if (alvos.length === 0) return responder("Nenhum paciente encontrado com esse filtro.");
@@ -246,45 +220,20 @@ async function processarComando(texto) {
     return responder(`Concluido. Mensagem enviada para ${enviados} paciente(s).`);
   }
 
-  // /todos [msg]
-  if (lower.startsWith("/todos ")) {
-    return enviarEmMassa(c => c.status === "ativo", t.substring(7).trim());
-  }
+  if (lower.startsWith("/todos ")) return enviarEmMassa(c => c.status === "ativo", t.substring(7).trim());
+  if (lower.startsWith("/quentes ")) return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "quente", t.substring(9).trim());
+  if (lower.startsWith("/mornos ")) return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "morno", t.substring(8).trim());
+  if (lower.startsWith("/semresposta ")) return enviarEmMassa(c => { const h = c.historico || []; return c.status === "ativo" && h.length > 0 && h[h.length - 1].role === "assistant"; }, t.substring(13).trim());
+  if (lower.startsWith("/inativos ")) { const limite = Date.now() - 48 * 60 * 60 * 1000; return enviarEmMassa(c => c.status === "ativo" && c.ultimaAtividade < limite, t.substring(10).trim()); }
 
-  // /quentes [msg]
-  if (lower.startsWith("/quentes ")) {
-    return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "quente", t.substring(9).trim());
-  }
-
-  // /mornos [msg]
-  if (lower.startsWith("/mornos ")) {
-    return enviarEmMassa(c => c.status === "ativo" && c.temperatura === "morno", t.substring(8).trim());
-  }
-
-  // /semresposta [msg]
-  if (lower.startsWith("/semresposta ")) {
-    return enviarEmMassa(c => {
-      const h = c.historico || [];
-      return c.status === "ativo" && h.length > 0 && h[h.length - 1].role === "assistant";
-    }, t.substring(13).trim());
-  }
-
-  // /inativos [msg]
-  if (lower.startsWith("/inativos ")) {
-    const limite = Date.now() - 48 * 60 * 60 * 1000;
-    return enviarEmMassa(c => c.status === "ativo" && c.ultimaAtividade < limite, t.substring(10).trim());
-  }
-
-  // /listar [grupo] — exibe lista de contatos sem enviar nada
   if (lower.startsWith("/listar") || lower === "listar" || /^listar\s/.test(lower)) {
     const partes = t.split(/\s+/);
     const grupo = (partes[1] || "todos").toLowerCase();
     const limite48 = Date.now() - 48 * 60 * 60 * 1000;
     const filtros2 = {
-      todos:       ([, cv]) => true,
-      quentes:     ([, cv]) => cv.temperatura === "quente",
-      mornos:      ([, cv]) => cv.temperatura === "morno",
-      inativos:    ([, cv]) => cv.status === "ativo" && cv.ultimaAtividade < limite48,
+      todos: ([, cv]) => true, quentes: ([, cv]) => cv.temperatura === "quente",
+      mornos: ([, cv]) => cv.temperatura === "morno",
+      inativos: ([, cv]) => cv.status === "ativo" && cv.ultimaAtividade < limite48,
       semresposta: ([, cv]) => { const h = cv.historico||[]; return cv.status==="ativo" && h.length>0 && h[h.length-1].role==="assistant"; },
     };
     const fn = filtros2[grupo] || filtros2.todos;
@@ -298,27 +247,16 @@ async function processarComando(texto) {
     return responder(`*Contatos — ${grupo}* (${alvos.length})\n\n${lista}`);
   }
 
-  // /fimdesemana [msg opcional] — retoma quem mandou sab/dom
   if (lower.startsWith("/fimdesemana") || /(fim de semana|final de semana|fim-de-semana)/.test(lower)) {
     const msgExtra = lower.startsWith("/fimdesemana") ? t.substring(13).trim() : "";
-    const msgRetomada = msgExtra ||
-      "Bom dia! Obrigado pela sua mensagem. Estamos retomando seu atendimento agora e ficamos à disposição para te ajudar da melhor forma.";
-
-    // Identifica sábado e domingo anteriores
+    const msgRetomada = msgExtra || "Bom dia! Obrigado pela sua mensagem. Estamos retomando seu atendimento agora.";
     const agora = new Date();
     const dia = agora.getDay();
     const diasAteSab = dia === 0 ? 1 : dia === 6 ? 0 : dia + 1;
     const sabado = new Date(agora); sabado.setDate(sabado.getDate() - diasAteSab); sabado.setHours(0,0,0,0);
     const domingo = new Date(sabado); domingo.setDate(domingo.getDate() + 1); domingo.setHours(23,59,59,999);
-
-    const alvos = Object.entries(conversas).filter(([, c]) => {
-      return c.status === "ativo" &&
-             c.ultimaAtividade >= sabado.getTime() &&
-             c.ultimaAtividade <= domingo.getTime();
-    });
-
+    const alvos = Object.entries(conversas).filter(([, c]) => c.status === "ativo" && c.ultimaAtividade >= sabado.getTime() && c.ultimaAtividade <= domingo.getTime());
     if (alvos.length === 0) return responder("Nenhum lead com mensagem no fim de semana.");
-
     await responder(`Retomando ${alvos.length} paciente(s) do fim de semana...`);
     let enviados = 0;
     for (const [numero, c] of alvos) {
@@ -334,16 +272,12 @@ async function processarComando(texto) {
     return responder(`Retomada concluída. ${enviados} paciente(s) notificado(s).`);
   }
 
-  // !exec <comando> — executa via hairtech-executor no host
   if (lower.startsWith("!exec ")) {
     const cmd = t.substring(6).trim();
     if (!cmd) return responder("Uso: !exec <comando>");
     try {
       const res = await axios.post("http://host.docker.internal:3099/run", { command: cmd }, {
-        headers: {
-          "x-approval-token": process.env.EXECUTOR_TOKEN || "hairtech-exec-2026",
-          "Content-Type": "application/json"
-        },
+        headers: { "x-approval-token": process.env.EXECUTOR_TOKEN || "hairtech-exec-2026", "Content-Type": "application/json" },
         timeout: 35000
       });
       const d = res.data;
@@ -355,8 +289,6 @@ async function processarComando(texto) {
     }
   }
 
-  // ── LINGUAGEM NATURAL ──────────────────────────────────────────
-  // Qualquer mensagem que não bateu nos comandos acima entra aqui
   try {
     const snap = {
       total: Object.keys(conversas).length,
@@ -365,59 +297,24 @@ async function processarComando(texto) {
       mornos: Object.values(conversas).filter(c => c.temperatura === "morno").length,
       humanos: Object.values(conversas).filter(c => c.status === "humano").length,
     };
-
     const resp = await axios.post(`${AI_BASE_URL}/chat/completions`, {
       model: AI_MODEL,
-      messages: [{
-        role: "user",
-        content: `Você interpreta comandos do Dr. Ricardo para o sistema da Clínica HairTech via WhatsApp.
-Estado atual: ${JSON.stringify(snap)}
-
-Mensagem do Dr. Ricardo: "${t}"
-
-Responda APENAS com JSON válido (sem markdown):
-{
-  "acao": "fimdesemana|todos|quentes|mornos|semresposta|inativos|status|listar|nao_entendido",
-  "grupo": "todos|quentes|mornos|semresposta|inativos (apenas quando acao=listar)",
-  "mensagem": "texto para enviar aos pacientes (SOMENTE se Dr. Ricardo pediu explicitamente para ENVIAR ou MANDAR uma mensagem)",
-  "resposta": "o que dizer ao Dr. Ricardo sobre o que você vai fazer"
-}
-
-Regras de mapeamento:
-- ENVIAR mensagem para leads: fim/final de semana → fimdesemana, quentes → quentes, mornos → mornos, sem resposta → semresposta, inativos → inativos, todos → todos
-- VER/LISTAR contatos (SEM enviar): lista, ver contatos, me mostra, quem são, contatos, quero ver → listar
-- quantos leads, status, resumo → status (sem mensagem)
-- se não entender → nao_entendido
-
-REGRA CRÍTICA: só defina "mensagem" se Dr. Ricardo disse explicitamente "manda", "envia", "avisa" ou "mande uma mensagem". Se ele quer VER ou LISTAR contatos, use acao=listar sem mensagem. NUNCA envie mensagens para pacientes sem ordem explícita.`
-      }],
-      max_tokens: 300,
-      temperature: 0.2
-    }, {
-      headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
-      timeout: 15000
-    });
-
+      messages: [{ role: "user", content: `Você interpreta comandos do Dr. Ricardo. Estado: ${JSON.stringify(snap)}. Mensagem: "${t}". Responda APENAS JSON: {"acao":"fimdesemana|todos|quentes|mornos|semresposta|inativos|status|listar|nao_entendido","grupo":"todos|quentes|mornos|semresposta|inativos","mensagem":"texto (SO se Dr pediu enviar)","resposta":"resposta ao Dr"}. REGRA CRITICA: so defina mensagem se Dr disse manda/envia/avisa. NUNCA envie sem ordem explicita.` }],
+      max_tokens: 300, temperature: 0.2
+    }, { headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 });
     const raw = resp.data.choices[0].message.content;
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("no json");
     const cmd = JSON.parse(match[0]);
-
     if (cmd.resposta) await responder(cmd.resposta);
-
-    if (cmd.acao === "status") {
-      return responder(
-        `*Status HairTech*\nTotal: ${snap.total} | Ativos: ${snap.ativos} | Quentes: ${snap.quentes} | Mornos: ${snap.mornos} | Humano: ${snap.humanos}`
-      );
-    }
+    if (cmd.acao === "status") return responder(`*Status*\nTotal: ${snap.total} | Ativos: ${snap.ativos} | Quentes: ${snap.quentes} | Mornos: ${snap.mornos} | Humano: ${snap.humanos}`);
     if (cmd.acao === "listar") {
       const grupo = (cmd.grupo || "todos").toLowerCase();
       const limite48nl = Date.now() - 48 * 60 * 60 * 1000;
       const filtrosLista = {
-        todos:       ([, cv]) => true,
-        quentes:     ([, cv]) => cv.temperatura === "quente",
-        mornos:      ([, cv]) => cv.temperatura === "morno",
-        inativos:    ([, cv]) => cv.status === "ativo" && cv.ultimaAtividade < limite48nl,
+        todos: ([, cv]) => true, quentes: ([, cv]) => cv.temperatura === "quente",
+        mornos: ([, cv]) => cv.temperatura === "morno",
+        inativos: ([, cv]) => cv.status === "ativo" && cv.ultimaAtividade < limite48nl,
         semresposta: ([, cv]) => { const h = cv.historico||[]; return cv.status==="ativo" && h.length>0 && h[h.length-1].role==="assistant"; },
       };
       const fnLista = filtrosLista[grupo] || filtrosLista.todos;
@@ -433,11 +330,11 @@ REGRA CRÍTICA: só defina "mensagem" se Dr. Ricardo disse explicitamente "manda
     if (cmd.mensagem) {
       const limite48 = Date.now() - 48 * 60 * 60 * 1000;
       const filtros = {
-        todos:       c => c.status === "ativo",
-        quentes:     c => c.status === "ativo" && c.temperatura === "quente",
-        mornos:      c => c.status === "ativo" && c.temperatura === "morno",
+        todos: c => c.status === "ativo",
+        quentes: c => c.status === "ativo" && c.temperatura === "quente",
+        mornos: c => c.status === "ativo" && c.temperatura === "morno",
         semresposta: c => { const h = c.historico||[]; return c.status==="ativo" && h.length>0 && h[h.length-1].role==="assistant"; },
-        inativos:    c => c.status === "ativo" && c.ultimaAtividade < limite48,
+        inativos: c => c.status === "ativo" && c.ultimaAtividade < limite48,
         fimdesemana: c => {
           const agora2 = new Date(); const dia2 = agora2.getDay();
           const diasAteSab2 = dia2===0?1:dia2===6?0:dia2+1;
@@ -452,13 +349,9 @@ REGRA CRÍTICA: só defina "mensagem" se Dr. Ricardo disse explicitamente "manda
   } catch (e) {
     console.error("Erro ao interpretar comando natural:", e.message);
   }
-
   return responder("Nao entendi. Envie *ajuda* para ver o que posso fazer por você.");
 }
 
-// ==========================
-// CLASSIFICAÇÃO DE LEAD
-// ==========================
 function classificarLead(texto) {
   const t = texto.toLowerCase();
   if (/(quero agendar|quero marcar|vou fazer|quero fazer|confirmar|pagar|fechar|marcar consulta|agendar agora)/.test(t)) return "quente";
@@ -466,19 +359,14 @@ function classificarLead(texto) {
   return "frio";
 }
 
-// Limpeza a cada hora
 setInterval(() => idsProcessados.clear(), 60 * 60 * 1000);
 setInterval(() => {
   const limite = Date.now() - 48 * 60 * 60 * 1000;
   for (const n in conversas) {
-    if (conversas[n].ultimaAtividade < limite && conversas[n].status === "encerrado")
-      delete conversas[n];
+    if (conversas[n].ultimaAtividade < limite && conversas[n].status === "encerrado") delete conversas[n];
   }
 }, 60 * 60 * 1000);
 
-// ==========================
-// PAINEL DE CONTROLE
-// ==========================
 app.use("/admin", adminRouter(conversas, enviarMensagem));
 app.use("/admin/export", require("./export-leads"));
 const apiInternal = require("./api-internal");
@@ -487,245 +375,121 @@ app.use("/api/internal", apiInternal);
 app.use("/nfse", criarRoterNfse(enviarMensagem, NOTIFY_PHONE, ADMIN_PASS));
 app.get("/manifest.json", (req, res) => res.sendFile(__dirname + "/manifest.json"));
 
-// ==========================
-// VERIFICAÇÃO DO WEBHOOK
-// ==========================
 app.get("/webhook", (req, res) => {
-  const mode      = req.query["hub.mode"];
-  const token     = req.query["hub.verify_token"];
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("Webhook verificado");
-    return res.status(200).send(challenge);
-  }
+  if (mode === "subscribe" && token === VERIFY_TOKEN) { console.log("Webhook verificado"); return res.status(200).send(challenge); }
   return res.sendStatus(403);
 });
 
-// ==========================
-// RECEBER MENSAGENS
-// ==========================
 app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
-
   try {
-    const value   = req.body.entry?.[0]?.changes?.[0]?.value;
+    const value = req.body.entry?.[0]?.changes?.[0]?.value;
     const message = value?.messages?.[0];
     if (!message) return;
-
     const msgId = message.id;
     if (idsProcessados.has(msgId)) return;
     idsProcessados.add(msgId);
-
     const from = message.from;
-
-    // Comandos do Dr. Ricardo
     if (from === OWNER_PHONE && message.type === "text") {
       await processarComando(message.text.body);
       return;
     }
-
-    // Inicializa conversa se nova
     if (!conversas[from]) {
       conversas[from] = {
-        historico: [],
-        ultimaAtividade: Date.now(),
-        status: "ativo",
-        tipo: "novo",
-        retomadas: 0,
-        proximaRetomada: null,
-        temperatura: "frio",
-        genero: null,
-        nome: null,
-        nota: null,
-        disclosureEnviado: false
+        historico: [], ultimaAtividade: Date.now(), status: "ativo", tipo: "novo",
+        retomadas: 0, proximaRetomada: null, temperatura: "frio",
+        genero: null, nome: null, nota: null, disclosureEnviado: false
       };
     }
-    // CFM 2.454/2026: envia disclosure na 1a mensagem
     await enviarDisclosureSeNovo(from);
-
     const c = conversas[from];
-
-    // Bot pausado: registra mas não responde
     if (c.status === "pausado" || c.status === "encerrado") {
       c.ultimaAtividade = Date.now();
       return;
     }
-
-    // Atualiza atividade e reseta retomada
     c.ultimaAtividade = Date.now();
-    c.proximaRetomada = Date.now() + (2 * 60 * 60 * 1000); // próxima retomada em 2h se sumir
-
+    c.proximaRetomada = Date.now() + (2 * 60 * 60 * 1000);
     let userMessage = "";
-
-    if (message.type === "text") {
-      userMessage = message.text.body;
-    } else if (message.type === "image") {
+    if (message.type === "text") userMessage = message.text.body;
+    else if (message.type === "image") {
       const imageId = message.image.id;
       const tipo = await analisarImagem(imageId);
       userMessage = `[IMAGEM: ${tipo}]`;
-
-      // Encaminha foto de cabelo para o Dr. Ricardo avaliar
       if (tipo === "FOTO_CABELO") {
-        encaminharFotoParaClinica(from, imageId).catch(e =>
-          console.error("Erro ao encaminhar foto:", e.message)
-        );
+        encaminharFotoParaClinica(from, imageId).catch(e => console.error("Erro ao encaminhar foto:", e.message));
         c.aguardandoAvaliacao = true;
       }
-    } else if (message.type === "audio" || message.type === "voice") {
-      userMessage = "[O paciente enviou um áudio]";
-    } else if (message.type === "document") {
-      userMessage = "[O paciente enviou um documento]";
-    } else if (message.type === "interactive") {
+    } else if (message.type === "audio" || message.type === "voice") userMessage = "[O paciente enviou um áudio]";
+    else if (message.type === "document") userMessage = "[O paciente enviou um documento]";
+    else if (message.type === "interactive") {
       const ia = message.interactive;
-      if (ia.type === "button_reply")  userMessage = ia.button_reply.title;
+      if (ia.type === "button_reply") userMessage = ia.button_reply.title;
       else if (ia.type === "list_reply") userMessage = ia.list_reply.title;
       else return;
-    } else {
-      return;
-    }
-
+    } else return;
     console.log(`[${from}] ${userMessage.substring(0, 100)}`);
-
-    // Atualiza temperatura do lead
     const novaTemp = classificarLead(userMessage);
     if (novaTemp === "quente") c.temperatura = "quente";
     else if (novaTemp === "morno" && c.temperatura !== "quente") c.temperatura = "morno";
-
-    // Detecta gênero do paciente
     if (!c.genero) {
       const tg = userMessage.toLowerCase();
       if (/(sou mulher|sou feminino|paciente mulher|\bela\b|minha filha|minha esposa|\bfeminina\b)/.test(tg)) c.genero = "feminino";
       else if (/(sou homem|sou masculino|paciente homem|\bele\b|meu filho|meu marido|\bmasculino\b)/.test(tg)) c.genero = "masculino";
     }
-
-    // Detecta tipo de paciente
     const msgLower = userMessage.toLowerCase();
-    if (msgLower.includes("já sou paciente") || msgLower.includes("sou paciente") || msgLower.includes("retorno")) {
-      c.tipo = "antigo";
-    }
-    if (msgLower.includes("transplante") || msgLower.includes("calvície") || msgLower.includes("calvicie")) {
-      c.tipo = "transplante";
-    }
-
-    // Marca como lida
+    if (msgLower.includes("já sou paciente") || msgLower.includes("sou paciente") || msgLower.includes("retorno")) c.tipo = "antigo";
+    if (msgLower.includes("transplante") || msgLower.includes("calvície") || msgLower.includes("calvicie")) c.tipo = "transplante";
     await marcarComoLido(msgId);
-
-    // Delay humanizado
     await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
-
     const resposta = await obterRespostaIA(from, userMessage);
     await processarResposta(from, resposta);
-
-    // Persiste no banco de forma assíncrona
     db.salvarConversa(from, conversas[from]).catch(() => {});
     db.salvarMensagem(from, "user", userMessage).catch(() => {});
     db.salvarMensagem(from, "assistant", resposta).catch(() => {});
-
-  } catch (error) {
-    console.error("Erro no webhook:", error.message);
-  }
+  } catch (error) { console.error("Erro no webhook:", error.message); }
 });
 
-// ==========================
-// ANÁLISE DE IMAGEM (VISÃO IA)
-// ==========================
 async function analisarImagem(imageId) {
   try {
-    // 1. Obtém URL da imagem via Meta API
-    const meta = await axios.get(
-      `https://graph.facebook.com/v18.0/${imageId}`,
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 10000 }
-    );
-    const imageUrl  = meta.data.url;
-    const mimeType  = meta.data.mime_type || "image/jpeg";
-
-    // 2. Baixa a imagem
-    const imgResp = await axios.get(imageUrl, {
-      responseType: "arraybuffer",
-      headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
-      timeout: 15000
-    });
+    const meta = await axios.get(`https://graph.facebook.com/v18.0/${imageId}`, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 10000 });
+    const imageUrl = meta.data.url;
+    const mimeType = meta.data.mime_type || "image/jpeg";
+    const imgResp = await axios.get(imageUrl, { responseType: "arraybuffer", headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 15000 });
     const base64 = Buffer.from(imgResp.data).toString("base64");
-
-    // 3. Envia para visão IA
-    const resp = await axios.post(
-      `${AI_BASE_URL}/chat/completions`,
-      {
-        model: AI_MODEL,
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:${mimeType};base64,${base64}` }
-            },
-            {
-              type: "text",
-              text: "Analise esta imagem e responda APENAS com uma palavra: 'COMPROVANTE' se for comprovante de pagamento, Pix, transferência ou recibo bancário. 'FOTO_CABELO' se for foto de cabelo, couro cabeludo, calvície ou área capilar. 'OUTRO' para qualquer outra coisa."
-            }
-          ]
-        }],
-        max_tokens: 10
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${GEMINI_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 20000
-      }
-    );
-
+    const resp = await axios.post(`${AI_BASE_URL}/chat/completions`, {
+      model: AI_MODEL,
+      messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } }, { type: "text", text: "Analise esta imagem e responda APENAS com uma palavra: 'COMPROVANTE' se for comprovante de pagamento. 'FOTO_CABELO' se for foto de cabelo/calvicie. 'OUTRO' caso contrario." }] }],
+      max_tokens: 10
+    }, { headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" }, timeout: 20000 });
     const resultado = resp.data.choices[0].message.content.trim().toUpperCase();
     if (resultado.includes("COMPROVANTE")) return "COMPROVANTE";
     if (resultado.includes("FOTO_CABELO") || resultado.includes("CABELO")) return "FOTO_CABELO";
     return "OUTRO";
-
-  } catch (e) {
-    console.error("Erro ao analisar imagem:", e.message);
-    return "OUTRO";
-  }
+  } catch (e) { console.error("Erro ao analisar imagem:", e.message); return "OUTRO"; }
 }
 
-// ==========================
-// PROCESSADOR DE RESPOSTA
-// ==========================
 async function processarResposta(from, resposta) {
   if (resposta.includes("[BOTAO_ESPECIALISTA]")) {
     const antesRaw = resposta.split("[BOTAO_ESPECIALISTA]")[0];
-    const antes = antesRaw
-      .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
-      .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
-      .replace(/\[PDF_FOTOS_M\]/g, "")
-      .replace(/\[PDF_FOTOS_F\]/g, "")
-      .replace(/\[PDF_FOTOS\]/g, "")
-      .replace(/\[HUMANO\]/g, "")
-      .trim();
-
+    const antes = antesRaw.replace(/\[NOTIF_AGENDAMENTO\]/g, "").replace(/\[NOTIF_TRANSPLANTE\]/g, "").replace(/\[PDF_FOTOS_M\]/g, "").replace(/\[PDF_FOTOS_F\]/g, "").replace(/\[PDF_FOTOS\]/g, "").replace(/\[HUMANO\]/g, "").trim();
     if (antes) await enviarMensagem(from, antes);
-
-    // Garante que a chave Pix seja sempre enviada antes do botão
     if (!antes.includes("49634881000191")) {
       await new Promise(r => setTimeout(r, 400));
-      await enviarMensagem(from,
-        "Para garantir a sua vaga, é necessário um sinal de R$150.\n\nChave Pix (CNPJ):\n49634881000191\n\nApós pagar, envie o comprovante pelo link abaixo:"
-      );
+      await enviarMensagem(from, "Para garantir a sua vaga, é necessário um sinal de R$150.\n\nChave Pix (CNPJ):\n49634881000191\n\nApós pagar, envie o comprovante pelo link abaixo:");
     }
-
     await new Promise(r => setTimeout(r, 500));
     await enviarBotaoEspecialista(from);
     await new Promise(r => setTimeout(r, 2000));
     await enviarMensagem(from, "Um detalhe importante: para garantir a melhor análise na tricoscopia, pedimos que evite lavar o cabelo nas 24 a 48 horas antes da consulta.");
-    await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix de R$150 (CNPJ: 49634881000191). Não confirmar agendamento sem comprovante.");
+    await notificarClinica(from, "Paciente encaminhado para especialista — aguardando Pix de R$150 (CNPJ: 49634881000191).");
     conversas[from].status = "humano";
     conversas[from].proximaRetomada = null;
-    // Vídeo HeyGen apenas para transplante (maior valor — economiza créditos)
-    if (conversas[from]?.tipo === "transplante") {
-      setTimeout(() => enviarVideoPersonalizado(from, "transplante").catch(() => {}), 3000);
-    }
+    if (conversas[from]?.tipo === "transplante") setTimeout(() => enviarVideoPersonalizado(from, "transplante").catch(() => {}), 3000);
     return;
   }
-
   if (resposta.includes("[MENU_INICIAL]")) {
     const antes = resposta.split("[MENU_INICIAL]")[0].trim();
     if (antes) await enviarMensagem(from, antes);
@@ -733,37 +497,15 @@ async function processarResposta(from, resposta) {
     await enviarMenuInicial(from);
     return;
   }
-
-  if (resposta.includes("[NOTIF_AGENDAMENTO]")) {
-    await notificarClinica(from, "Paciente confirmou interesse em agendar consulta — aguardando Pix R$150 (CNPJ: 49634881000191). Não agendar sem comprovante.");
-  }
-  if (resposta.includes("[NOTIF_TRANSPLANTE]")) {
-    await notificarClinica(from, "Paciente com interesse em transplante capilar");
-  }
-  if (resposta.includes("[HUMANO]")) {
-    conversas[from].status = "humano";
-    conversas[from].proximaRetomada = null;
-  }
-
+  if (resposta.includes("[NOTIF_AGENDAMENTO]")) await notificarClinica(from, "Paciente confirmou interesse em agendar — aguardando Pix R$150.");
+  if (resposta.includes("[NOTIF_TRANSPLANTE]")) await notificarClinica(from, "Paciente com interesse em transplante capilar");
+  if (resposta.includes("[HUMANO]")) { conversas[from].status = "humano"; conversas[from].proximaRetomada = null; }
   const enviarFotoM = resposta.includes("[PDF_FOTOS_M]");
   const enviarFotoF = resposta.includes("[PDF_FOTOS_F]");
-  const enviarPdf   = resposta.includes("[PDF_FOTOS]");
-
-  const limpa = resposta
-    .replace(/\[NOTIF_AGENDAMENTO\]/g, "")
-    .replace(/\[NOTIF_TRANSPLANTE\]/g, "")
-    .replace(/\[PDF_FOTOS_M\]/g, "")
-    .replace(/\[PDF_FOTOS_F\]/g, "")
-    .replace(/\[PDF_FOTOS\]/g, "")
-    .replace(/\[HUMANO\]/g, "")
-    .trim();
-
+  const enviarPdf = resposta.includes("[PDF_FOTOS]");
+  const limpa = resposta.replace(/\[NOTIF_AGENDAMENTO\]/g, "").replace(/\[NOTIF_TRANSPLANTE\]/g, "").replace(/\[PDF_FOTOS_M\]/g, "").replace(/\[PDF_FOTOS_F\]/g, "").replace(/\[PDF_FOTOS\]/g, "").replace(/\[HUMANO\]/g, "").trim();
   const partes = dividirMensagem(limpa);
-  for (const parte of partes) {
-    await enviarMensagem(from, parte);
-    if (partes.length > 1) await new Promise(r => setTimeout(r, 700));
-  }
-
+  for (const parte of partes) { await enviarMensagem(from, parte); if (partes.length > 1) await new Promise(r => setTimeout(r, 700)); }
   if (enviarPdf || enviarFotoM || enviarFotoF) {
     await new Promise(r => setTimeout(r, 800));
     if (enviarFotoM) await enviarGuiaFotos(from, "masculino");
@@ -772,39 +514,17 @@ async function processarResposta(from, resposta) {
   }
 }
 
-// ==========================
-// RESPOSTA DA IA
-// ==========================
 async function chamarIA(model, systemPrompt, historico, opts = {}) {
   const isOpenAI = !model.startsWith("gemini-");
-  const url = isOpenAI
-    ? "https://api.openai.com/v1/chat/completions"
-    : `${AI_BASE_URL}/chat/completions`;
+  const url = isOpenAI ? "https://api.openai.com/v1/chat/completions" : `${AI_BASE_URL}/chat/completions`;
   const key = isOpenAI ? OPENAI_API_KEY : GEMINI_API_KEY;
   if (!key) throw new Error(`API key missing for ${isOpenAI ? "OpenAI" : "Gemini"}`);
-
   const histArr = historico.map(m => ({ role: m.role, content: m.content }));
-  const messages = systemPrompt
-    ? [{ role: "system", content: systemPrompt }, ...histArr]
-    : histArr;
-
-  const resp = await axios.post(
-    url,
-    {
-      model,
-      messages,
-      max_tokens: opts.maxTokens || 1500,
-      temperature: opts.temperature !== undefined ? opts.temperature : 0.6
-    },
-    {
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      timeout: opts.timeout || 25000
-    }
-  );
+  const messages = systemPrompt ? [{ role: "system", content: systemPrompt }, ...histArr] : histArr;
+  const resp = await axios.post(url, { model, messages, max_tokens: opts.maxTokens || 1500, temperature: opts.temperature !== undefined ? opts.temperature : 0.6 }, { headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, timeout: opts.timeout || 25000 });
   return resp.data.choices[0].message.content;
 }
 
-// Try Gemini first, fallback to OpenAI gpt-4o-mini on failure
 async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
   const agente = opts.agente || "AV";
   let modelUsed = AI_MODEL;
@@ -816,10 +536,7 @@ async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
   } catch (e) {
     const status = e.response?.status;
     console.warn(`[AI] ${AI_MODEL} falhou (status=${status} code=${e.code}): ${e.message}`);
-    if (!OPENAI_API_KEY) {
-      console.warn("[AI] OPENAI_API_KEY ausente no .env -- sem fallback");
-      throw e;
-    }
+    if (!OPENAI_API_KEY) { console.warn("[AI] OPENAI_API_KEY ausente no .env -- sem fallback"); throw e; }
   }
   try {
     modelUsed = "gpt-4o-mini";
@@ -827,17 +544,13 @@ async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
     console.log("[AI] Resposta via fallback OpenAI gpt-4o-mini");
     logAuditAI(agente, modelUsed, historico, resp, 0).catch(() => {});
     return resp;
-  } catch (e) {
-    console.error("[AI] Fallback OpenAI tambem falhou:", e.response?.data || e.message);
-    throw e;
-  }
+  } catch (e) { console.error("[AI] Fallback OpenAI tambem falhou:", e.response?.data || e.message); throw e; }
 }
 
 async function obterRespostaIA(numero, mensagem) {
   const c = conversas[numero];
   c.historico.push({ role: "user", content: mensagem, ts: Date.now() });
   if (c.historico.length > 20) c.historico = c.historico.slice(-20);
-
   try {
     const aiResp = await chamarIAComFallback(SYSTEM_PROMPT, c.historico);
     c.historico.push({ role: "assistant", content: aiResp, ts: Date.now() });
@@ -848,413 +561,273 @@ async function obterRespostaIA(numero, mensagem) {
   }
 }
 
-// ==========================
-// MARCAR COMO LIDO
-// ==========================
 async function marcarComoLido(messageId) {
   try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-      { messaging_product: "whatsapp", status: "read", message_id: messageId },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 5000 }
-    );
+    await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, { messaging_product: "whatsapp", status: "read", message_id: messageId }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 5000 });
   } catch (_) {}
 }
 
-// ==========================
-// MENU INICIAL INTERATIVO
-// ==========================
 async function enviarMenuInicial(to) {
   try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to,
-        type: "interactive",
-        interactive: {
-          type: "list",
-          header: { type: "text", text: "Clinica HairTech" },
-          body: { text: "Para te direcionar corretamente, selecione uma das opcoes abaixo:" },
-          action: {
-            button: "Ver opcoes",
-            sections: [{
-              title: "Como posso te ajudar?",
-              rows: [
-                { id: "agendar_consulta",   title: "Quero agendar consulta",       description: "Garanta sua vaga agora" },
-                { id: "iniciar_tratamento", title: "Quero iniciar tratamento",      description: "Saiba como funciona" },
-                { id: "tirar_duvidas",      title: "Tenho duvidas — fale comigo",  description: "Tire todas as suas duvidas aqui" },
-                { id: "paciente_antigo",    title: "Ja sou paciente",               description: "Retorno ou reagendamento" }
-              ]
-            }]
-          }
-        }
-      },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 }
-    );
+    await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
+      messaging_product: "whatsapp", to, type: "interactive",
+      interactive: { type: "list", header: { type: "text", text: "Clinica HairTech" }, body: { text: "Para te direcionar corretamente, selecione uma das opcoes abaixo:" }, action: { button: "Ver opcoes", sections: [{ title: "Como posso te ajudar?", rows: [{ id: "agendar_consulta", title: "Quero agendar consulta", description: "Garanta sua vaga agora" }, { id: "iniciar_tratamento", title: "Quero iniciar tratamento", description: "Saiba como funciona" }, { id: "tirar_duvidas", title: "Tenho duvidas — fale comigo", description: "Tire todas as suas duvidas aqui" }, { id: "paciente_antigo", title: "Ja sou paciente", description: "Retorno ou reagendamento" }] }] } }
+    }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 });
   } catch (e) {
     console.error("Menu falhou:", e.response?.data || e.message);
-    await enviarMensagem(to,
-      "Para te direcionar corretamente:\n\n1. Quero agendar consulta\n2. Quero iniciar tratamento\n3. Tenho duvidas — fale comigo\n4. Ja sou paciente"
-    );
+    await enviarMensagem(to, "Para te direcionar:\n\n1. Agendar consulta\n2. Iniciar tratamento\n3. Tirar duvidas\n4. Ja sou paciente");
   }
 }
 
-// ==========================
-// ENVIAR MENSAGEM
-// ==========================
 async function enviarMensagem(to, mensagem) {
   try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to,
-        type: "text",
-        text: { body: mensagem, preview_url: false }
-      },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 }
-    );
-  } catch (e) {
-    console.error("Erro ao enviar:", e.response?.data || e.message);
-  }
+    await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, { messaging_product: "whatsapp", to, type: "text", text: { body: mensagem, preview_url: false } }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 });
+  } catch (e) { console.error("Erro ao enviar:", e.response?.data || e.message); }
 }
 
-// ==========================
-// PDF ORIENTAÇÃO DE FOTOS
-// ==========================
 async function enviarPdfOrientacaoFotos(to) {
   try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to,
-        type: "document",
-        document: {
-          link: "https://drive.google.com/uc?export=download&id=1oYzUwyC1EdWpIZUb9dQDvwG1ipM1zdqz",
-          filename: "Guia de Orientacoes para Fotos - HairTech.pdf"
-        }
-      },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 15000 }
-    );
-  } catch (e) {
-    console.error("Erro ao enviar PDF:", e.response?.data || e.message);
-  }
+    await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, { messaging_product: "whatsapp", to, type: "document", document: { link: "https://drive.google.com/uc?export=download&id=1oYzUwyC1EdWpIZUb9dQDvwG1ipM1zdqz", filename: "Guia de Orientacoes para Fotos - HairTech.pdf" } }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 15000 });
+  } catch (e) { console.error("Erro ao enviar PDF:", e.response?.data || e.message); }
 }
 
-// ==========================
-// GUIA DE FOTOS POR GÊNERO
-// ==========================
-const GUIA_FOTOS_URL = {
-  masculino: process.env.GUIA_FOTOS_M || "https://lh3.googleusercontent.com/d/18Hw5UpfApl0CG5mPUdSCtsAoKysEEvBd",
-  feminino:  process.env.GUIA_FOTOS_F || "https://lh3.googleusercontent.com/d/1yFMQhCURScmw0SjHsASbkzVBSGl6CzLc"
-};
+const GUIA_FOTOS_URL = { masculino: process.env.GUIA_FOTOS_M || "https://lh3.googleusercontent.com/d/18Hw5UpfApl0CG5mPUdSCtsAoKysEEvBd", feminino: process.env.GUIA_FOTOS_F || "https://lh3.googleusercontent.com/d/1yFMQhCURScmw0SjHsASbkzVBSGl6CzLc" };
 
 async function enviarGuiaFotos(to, genero) {
   const url = GUIA_FOTOS_URL[genero];
   if (!url) return;
   try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to,
-        type: "image",
-        image: {
-          link: url,
-          caption: "Use essa imagem como referencia para os angulos das fotos."
-        }
-      },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 15000 }
-    );
-  } catch (e) {
-    console.error("Erro ao enviar guia de fotos:", e.response?.data || e.message);
-  }
+    await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, { messaging_product: "whatsapp", to, type: "image", image: { link: url, caption: "Use essa imagem como referencia para os angulos das fotos." } }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 15000 });
+  } catch (e) { console.error("Erro ao enviar guia de fotos:", e.response?.data || e.message); }
 }
 
-// ==========================
-// ENCAMINHAR FOTO PARA CLÍNICA
-// ==========================
 async function encaminharFotoParaClinica(from, imageId) {
   if (!NOTIFY_PHONE) return;
   try {
-    // Obtém URL da imagem
-    const meta = await axios.get(
-      `https://graph.facebook.com/v18.0/${imageId}`,
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 10000 }
-    );
+    const meta = await axios.get(`https://graph.facebook.com/v18.0/${imageId}`, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 10000 });
     const imageUrl = meta.data.url;
     const mimeType = meta.data.mime_type || "image/jpeg";
-
-    // Baixa a imagem
-    const imgResp = await axios.get(imageUrl, {
-      responseType: "arraybuffer",
-      headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
-      timeout: 15000
-    });
-
-    // Faz upload para WhatsApp Media API
+    const imgResp = await axios.get(imageUrl, { responseType: "arraybuffer", headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 15000 });
     const blob = new Blob([imgResp.data], { type: mimeType });
     const formData = new FormData();
     formData.append("messaging_product", "whatsapp");
     formData.append("type", mimeType);
     formData.append("file", blob, "foto_paciente.jpg");
-
-    const uploadResp = await fetch(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/media`,
-      { method: "POST", headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, body: formData }
-    );
+    const uploadResp = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/media`, { method: "POST", headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, body: formData });
     const uploadData = await uploadResp.json();
-
-    if (!uploadData.id) {
-      console.error("Upload falhou:", uploadData);
-      return;
-    }
-
-    // Envia para o Dr. Ricardo
-    const caption = `*HairTech — Foto para avaliacao*\nPaciente: +${from}\n\nAnalise e use o painel /admin para dar continuidade ao atendimento.`;
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: NOTIFY_PHONE,
-        type: "image",
-        image: { id: uploadData.id, caption }
-      },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 }
-    );
-
+    if (!uploadData.id) { console.error("Upload falhou:", uploadData); return; }
+    const caption = `*HairTech — Foto para avaliacao*\nPaciente: +${from}\n\nAnalise e use o painel /admin para dar continuidade.`;
+    await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, { messaging_product: "whatsapp", to: NOTIFY_PHONE, type: "image", image: { id: uploadData.id, caption } }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 });
     console.log(`Foto encaminhada para clinica: paciente ${from}`);
-  } catch (e) {
-    console.error("Erro ao encaminhar foto:", e.response?.data || e.message);
-  }
+  } catch (e) { console.error("Erro ao encaminhar foto:", e.response?.data || e.message); }
 }
 
-// ==========================
-// NOTIFICAÇÃO INTERNA
-// ==========================
 async function notificarClinica(numeroPaciente, motivo) {
   if (!NOTIFY_PHONE) return;
   try {
     const temp = conversas[numeroPaciente]?.temperatura || "frio";
     const emoji = temp === "quente" ? "LEAD QUENTE" : temp === "morno" ? "Lead morno" : "Lead frio";
     const texto = `*HairTech — ${emoji}*\n\nPaciente: +${numeroPaciente}\nMotivo: ${motivo}\n\nAssuma o atendimento quando possivel.`;
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-      { messaging_product: "whatsapp", to: NOTIFY_PHONE, type: "text", text: { body: texto } },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 }
-    );
-  } catch (e) {
-    console.error("Erro notificação:", e.response?.data || e.message);
-  }
+    await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, { messaging_product: "whatsapp", to: NOTIFY_PHONE, type: "text", text: { body: texto } }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 });
+  } catch (e) { console.error("Erro notificação:", e.response?.data || e.message); }
 }
 
-// ==========================
-// BOTÃO ESPECIALISTA
-// ==========================
 async function enviarBotaoEspecialista(to) {
   try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to,
-        type: "interactive",
-        interactive: {
-          type: "cta_url",
-          body: { text: "Clique no botao abaixo para falar com um dos nossos especialistas e dar continuidade ao seu agendamento:" },
-          action: {
-            name: "cta_url",
-            parameters: { display_text: "Falar com Especialista", url: "https://wa.me/message/AYEFKCOTY24ZC1" }
-          }
-        }
-      },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 }
-    );
+    await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "cta_url", body: { text: "Clique no botao abaixo para falar com um dos nossos especialistas:" }, action: { name: "cta_url", parameters: { display_text: "Falar com Especialista", url: "https://wa.me/message/AYEFKCOTY24ZC1" } } } }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 });
   } catch (e) {
     console.error("Botão falhou:", e.response?.data || e.message);
     await enviarMensagem(to, "Para dar continuidade ao seu agendamento:\nhttps://wa.me/message/AYEFKCOTY24ZC1");
   }
 }
 
-// ==========================
-// UTILITÁRIOS
-// ==========================
 function dividirMensagem(texto, maxLen = 3900) {
   if (texto.length <= maxLen) return [texto];
   const partes = [];
   let atual = "";
   for (const bloco of texto.split("\n\n")) {
     const tentativa = atual ? atual + "\n\n" + bloco : bloco;
-    if (tentativa.length > maxLen) {
-      if (atual) partes.push(atual.trim());
-      atual = bloco;
-    } else {
-      atual = tentativa;
-    }
+    if (tentativa.length > maxLen) { if (atual) partes.push(atual.trim()); atual = bloco; }
+    else atual = tentativa;
   }
   if (atual) partes.push(atual.trim());
   return partes;
 }
 
-// ==========================
-// ROTAS
-// ==========================
-app.get("/", (req, res) => res.json({ status: "online", bot: "Clinica HairTech", versao: "3.0" }));
+app.get("/", (req, res) => res.json({ status: "online", bot: "Clinica HairTech", versao: "3.1" }));
 app.get("/health", (req, res) => res.json({ status: "ok" }));
-
-app.get("/privacidade", (req, res) => res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Política de Privacidade — Clínica HairTech</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;line-height:1.7}h1{color:#1a1a2e}h2{color:#4a4a6a;margin-top:32px}a{color:#7c3aed}</style></head><body><h1>Política de Privacidade</h1><p><strong>Clínica HairTech</strong> — Atualizado em abril de 2026</p><h2>1. Informações coletadas</h2><p>Ao interagir com nossa assistente virtual via WhatsApp, coletamos: número de telefone, conteúdo das mensagens enviadas e informações sobre interesse em tratamentos capilares.</p><h2>2. Uso das informações</h2><p>As informações são usadas exclusivamente para: atendimento ao paciente, agendamento de consultas, envio de orientações médicas e comunicações relacionadas aos serviços da clínica.</p><h2>3. Compartilhamento</h2><p>Não compartilhamos seus dados com terceiros, exceto com a equipe médica da Clínica HairTech para fins de atendimento. Utilizamos a plataforma WhatsApp Business API (Meta) e serviços de inteligência artificial para processamento das mensagens.</p><h2>4. Armazenamento</h2><p>Os dados são armazenados de forma segura e mantidos pelo período necessário ao atendimento. Conversas inativas por mais de 30 dias são removidas automaticamente.</p><h2>5. Seus direitos</h2><p>Você pode solicitar a exclusão dos seus dados a qualquer momento enviando uma mensagem para nossa assistente virtual ou pelo e-mail da clínica.</p><h2>6. Contato</h2><p>Clínica HairTech — WhatsApp: <a href="https://wa.me/5521993542383">+55 21 99354-2383</a></p></body></html>`));
-
-app.get("/termos", (req, res) => res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Termos de Uso — Clínica HairTech</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;line-height:1.7}h1{color:#1a1a2e}h2{color:#4a4a6a;margin-top:32px}a{color:#7c3aed}</style></head><body><h1>Termos de Uso</h1><p><strong>Clínica HairTech</strong> — Atualizado em abril de 2026</p><h2>1. Aceitação</h2><p>Ao utilizar a assistente virtual da Clínica HairTech via WhatsApp, você concorda com estes termos.</p><h2>2. Serviço</h2><p>Nossa assistente virtual fornece informações sobre tratamentos capilares, agendamento de consultas e orientações gerais. Não substitui consulta médica presencial.</p><h2>3. Uso adequado</h2><p>O serviço destina-se exclusivamente a pacientes e interessados nos serviços da Clínica HairTech. É proibido uso indevido, automatizado ou para fins comerciais não autorizados.</p><h2>4. Limitação de responsabilidade</h2><p>As informações fornecidas pela assistente virtual são de caráter orientativo. Decisões médicas devem ser tomadas em consulta com nossos especialistas.</p><h2>5. Contato</h2><p>Clínica HairTech — WhatsApp: <a href="https://wa.me/5521993542383">+55 21 99354-2383</a></p></body></html>`));
+app.get("/privacidade", (req, res) => res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Privacidade — HairTech</title></head><body><h1>Política de Privacidade</h1><p>Clínica HairTech — Atualizado em 17/05/2026</p><p>Ao interagir com nossa assistente virtual via WhatsApp, coletamos: número de telefone, conteúdo das mensagens e informações sobre interesse em tratamentos capilares.</p><p>Usado exclusivamente para atendimento, agendamento e comunicações da clínica. Dados sensíveis tratados conforme LGPD.</p><p>Contato: <a href="https://wa.me/5521993542383">+55 21 99354-2383</a></p></body></html>`));
+app.get("/termos", (req, res) => res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Termos — HairTech</title></head><body><h1>Termos de Uso</h1><p>Ao utilizar a assistente virtual da Clínica HairTech via WhatsApp, você concorda com estes termos. Informações são orientativas. Decisões médicas em consulta presencial.</p></body></html>`));
 
 app.get("/status", async (req, res) => {
   const metricas = await db.buscarMetricas().catch(() => null);
-  res.json({
-    status: "online",
-    conversasAtivas: Object.keys(conversas).length,
-    modelo: AI_MODEL,
-    consultasAgendadas: Object.keys(lembretes.consultas).length,
-    banco: !!db.pool,
-    metricas
-  });
+  res.json({ status: "online", conversasAtivas: Object.keys(conversas).length, modelo: AI_MODEL, consultasAgendadas: Object.keys(lembretes.consultas).length, banco: !!db.pool, metricas });
 });
 
-// API para registrar consulta agendada (usada pelo especialista após confirmar)
 app.post("/consulta", async (req, res) => {
   const { senha, numero, nome, data, unidade, tipo } = req.body;
   if (senha !== ADMIN_PASS) return res.status(401).json({ erro: "Não autorizado" });
   if (!numero || !data || !unidade) return res.status(400).json({ erro: "numero, data e unidade são obrigatórios" });
-
   const dataObj = new Date(data);
-
-  const id = lembretes.agendarLembrete(numero, {
-    nome,
-    data: dataObj,
-    unidade,
-    tipo: tipo || "consulta"
-  });
-
-  // Envia link do Google Calendar para Dr. Ricardo
-  try {
-    const msgAgenda = formatarMensagemAgenda({ nome, data: dataObj, unidade, tipo, numero });
-    await enviarMensagem(NOTIFY_PHONE, msgAgenda);
-  } catch (_) {}
-
+  const id = lembretes.agendarLembrete(numero, { nome, data: dataObj, unidade, tipo: tipo || "consulta" });
+  try { const msgAgenda = formatarMensagemAgenda({ nome, data: dataObj, unidade, tipo, numero }); await enviarMensagem(NOTIFY_PHONE, msgAgenda); } catch (_) {}
   res.json({ ok: true, id });
 });
 
-// ==========================
-// DIAGNÓSTICO
-// ==========================
 app.get("/diagnostico", async (req, res) => {
   if (req.query.senha !== ADMIN_PASS) return res.status(401).json({ erro: "Não autorizado" });
-
-  const resultado = {
-    variaveis: {
-      WHATSAPP_TOKEN: WHATSAPP_TOKEN ? WHATSAPP_TOKEN.substring(0, 20) + "..." : "NÃO DEFINIDO",
-      PHONE_NUMBER_ID: PHONE_NUMBER_ID || "NÃO DEFINIDO",
-      VERIFY_TOKEN: VERIFY_TOKEN || "NÃO DEFINIDO",
-      GEMINI_API_KEY: GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 15) + "..." : "NÃO DEFINIDO",
-      AI_MODEL,
-      NOTIFY_PHONE
-    },
-    testes: {}
-  };
-
-  // Testa token WhatsApp
+  const resultado = { variaveis: { WHATSAPP_TOKEN: WHATSAPP_TOKEN ? WHATSAPP_TOKEN.substring(0, 20) + "..." : "NÃO DEFINIDO", PHONE_NUMBER_ID: PHONE_NUMBER_ID || "NÃO DEFINIDO", VERIFY_TOKEN: VERIFY_TOKEN || "NÃO DEFINIDO", GEMINI_API_KEY: GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 15) + "..." : "NÃO DEFINIDO", AI_MODEL, NOTIFY_PHONE }, testes: {} };
   try {
-    const r = await axios.get(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}`,
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 8000 }
-    );
+    const r = await axios.get(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}`, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 8000 });
     resultado.testes.whatsapp_token = { ok: true, numero: r.data.display_phone_number, nome: r.data.verified_name };
-  } catch (e) {
-    resultado.testes.whatsapp_token = { ok: false, erro: e.response?.data?.error?.message || e.message };
-  }
-
-  // Testa Gemini
+  } catch (e) { resultado.testes.whatsapp_token = { ok: false, erro: e.response?.data?.error?.message || e.message }; }
   try {
-    const r = await axios.post(
-      `${AI_BASE_URL}/chat/completions`,
-      { model: AI_MODEL, messages: [{ role: "user", content: "oi" }], max_tokens: 5 },
-      { headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 }
-    );
+    const r = await axios.post(`${AI_BASE_URL}/chat/completions`, { model: AI_MODEL, messages: [{ role: "user", content: "oi" }], max_tokens: 5 }, { headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 });
     resultado.testes.gemini = { ok: true, modelo: r.data.model };
-  } catch (e) {
-    resultado.testes.gemini = { ok: false, erro: e.response?.data?.error?.message || e.message };
-  }
-
-  // Testa banco de dados
+  } catch (e) { resultado.testes.gemini = { ok: false, erro: e.response?.data?.error?.message || e.message }; }
   try {
-    if (db.pool) {
-      await db.pool.query("SELECT 1");
-      resultado.testes.banco = { ok: true, conversas: Object.keys(conversas).length };
-    } else {
-      resultado.testes.banco = { ok: false, erro: "DATABASE_URL não configurado" };
-    }
-  } catch (e) {
-    resultado.testes.banco = { ok: false, erro: e.message };
-  }
-
+    if (db.pool) { await db.pool.query("SELECT 1"); resultado.testes.banco = { ok: true, conversas: Object.keys(conversas).length }; }
+    else resultado.testes.banco = { ok: false, erro: "DATABASE_URL não configurado" };
+  } catch (e) { resultado.testes.banco = { ok: false, erro: e.message }; }
   const tudo_ok = Object.values(resultado.testes).every(t => t.ok);
   res.json({ ...resultado, status: tudo_ok ? "TUDO OK" : "PROBLEMAS ENCONTRADOS" });
 });
 
-
-// /admin/audit?senha= - export CSV ultimos 30 dias (CFM 2.454/2026 5 anos retencao)
 app.get("/admin/audit", async (req, res) => {
   if (req.query.senha !== ADMIN_PASS) return res.status(401).send("Nao autorizado");
   if (!db.pool) return res.status(503).send("DB nao configurado");
   try {
-    const r = await db.pool.query(
-      "SELECT id, agente, model, prompt_hash, response_hash, tokens, ts FROM audit_ai_calls WHERE ts > NOW() - INTERVAL '30 days' ORDER BY ts DESC"
-    );
-    const rows = r.rows;
+    const r = await db.pool.query("SELECT id, agente, model, prompt_hash, response_hash, tokens, ts FROM audit_ai_calls WHERE ts > NOW() - INTERVAL '30 days' ORDER BY ts DESC");
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", "attachment; filename=audit_ai_calls.csv");
     res.write("id,agente,model,prompt_hash,response_hash,tokens,ts\n");
-    for (const row of rows) {
-      res.write(`${row.id},${row.agente},${row.model},${row.prompt_hash},${row.response_hash},${row.tokens},${row.ts.toISOString()}\n`);
-    }
+    for (const row of r.rows) res.write(`${row.id},${row.agente},${row.model},${row.prompt_hash},${row.response_hash},${row.tokens},${row.ts.toISOString()}\n`);
     res.end();
-  } catch (e) {
-    res.status(500).send("Erro: " + e.message);
-  }
+  } catch (e) { res.status(500).send("Erro: " + e.message); }
 });
 
 const PORT = process.env.PORT || 3000;
 
 // ==========================
-// WEBHOOK ANA (WhatsApp Web via WAHA)
+// WEBHOOK ANA (WhatsApp Web via WAHA) — SOUL v4.0
 // ==========================
-const ANA_SYSTEM_PROMPT = `Voce e ANA, especialista em vendas de transplante capilar FUE da Clinica HairTech.
+const ANA_SYSTEM_PROMPT = `# IDENTIDADE
+Voce e a ANA, agente de retencao e conversao da Clinica HairTech. Trabalha pelo numero 5521967813366. Sua funcao NAO e atender paciente direto - esse e papel do Assistente Virtual (5521993542383). Voce reativa leads que esfriaram ou nao converteram, fazendo contato proativo e persuasivo. Tom: humano, profissional, acolhedor. Primeira pessoa ("eu", "comigo"). Nunca afirmar ser humana. Nunca negar ser IA quando perguntada direto. Se perguntada, responder apenas "sou a Ana, atendente da HairTech".
 
-PERSONALIDADE:
-- Tom: acolhedor, empatico, profissional, brasileiro
-- Use linguagem natural ("ta", "pra", "to" sao OK)
-- Nunca soe robotica ou generica
+# REGRA ZERO - FILTROS DE MENSAGEM (CRITICO)
+NAO RESPONDA mensagens com qualquer um destes padroes (silencio total):
+- Texto comecando com "Status HairTech"
+- Texto contendo "LEAD DO ASSISTENTE VIRTUAL"
+- Texto comecando com "Mensagem enviada para"
+- Texto comecando com "Concluido."
+- Texto comecando com "Nenhum lead"
+- Texto comecando com "Enviando para"
+- Texto comecando com "Vou interromper" ou "Vou parar" ou "Vou fornecer"
+- Texto comecando com "Informarei ao Dr."
 
-TABELA DE PRECOS (revelar APENAS quando perguntado diretamente sobre valor):
-- Padrao: R$10.000 (ate 12x com juros automaticos)
-- A Vista Pix/dinheiro: R$9.500
-- A Vista sem rosto: R$9.300
-- Paciente Modelo: R$8.000 (12x sem juros, autoriza fotos/videos)
-- Consulta: R$350 Rio Bonito / R$400 Niteroi e Barra
-- Sinal: R$150 Pix CNPJ 49.634.881/0001-91 (nao reembolsavel < 24h)
-- MINIMO ABSOLUTO: R$8.000
+PROCESSE NORMALMENTE quando:
+- Mensagem do Dr. Ricardo (5521982006372) - tratado pelo modo dono separado
+- Mensagem do Assistente Virtual com [BRIEFING_DIARIO], [LEAD_CONVERTIDO] ou [ORIENTACAO_RESPONDIDA]
 
-AGENDA:
-- Nunca marcar as 12h
-- Preferencia: terca > quinta > sexta > segunda
-- Nunca prometer resultado sem avaliacao presencial
+REDIRECIONE quando paciente novo (qualquer numero desconhecido) chegar diretamente:
+"Oi! Aqui e a Ana da Clinica HairTech. Pra agendar consulta ou tirar duvidas, me chama no nosso atendimento principal: (21) 99354-2383. Eles vao cuidar de voce direitinho!"
+Depois nao responda mais nada nesse contato.
 
-HARD LIMITS:
-- Decisoes medicas so apos consulta presencial
-- Sinal sempre Pix CNPJ 49.634.881/0001-91
-- Complicacao medica -> escalar Dr. Ricardo (+5521982006372)
+# DADOS DA CLINICA
+Clinica HairTech. Tricologia, transplante capilar FUE, tratamentos capilares.
+Responsavel tecnico: Dr. Ricardo Meireles Marcelino. CRM 52-0107394-0. Equipe cirurgica de SP, 10+ anos.
+CNPJ: 49634881000191. Site: www.clinicahairtech.com. Instagram: @clinica.hairtech. Tel fixo: (21) 3170-9170.
 
-Quando cliente quer agendar, pedir: nome completo, melhor dia (preferindo ordem acima) e turno.`;
+UNIDADES:
+- Rio Bonito (sede + centro cirurgico): Av Presidente Arthur Bernardes, 106, loja 2, Centro. Seg-sex 9h-11h e 13h-17h. Almoco 11h-13h NAO agenda.
+- Niteroi: Rua Ministro Otavio Kelly, 337, sala 801, Jardim Icarai. APENAS quartas, mesmo horario.
+- Barra: Av Vice Presidente Jose Alencar, sala 208, Barra Olimpica. APENAS sabados sob demanda (lista 5+).
+- Online: teleconsulta com Dr. Ricardo, mesmo valor de Rio Bonito.
+
+# VALORES OFICIAIS (atualizado 17/05/2026)
+
+## CONSULTAS
+- Rio Bonito ou Online: R$ 350
+- Niteroi ou Barra: R$ 400
+Inclui anamnese, tricoscopia digital, analise couro cabeludo, prescricao personalizada.
+
+## SINAL
+R$ 150 via Pix - Chave: CNPJ 49634881000191 (Clinica HairTech). Abatido do valor da consulta. Cancelamento <24h = sinal nao reembolsavel.
+
+## TRANSPLANTE FUE - 4 PACOTES
+Todos incluem: cirurgia equipe SP, 6 sessoes MMP pos, 12 meses acompanhamento Dr. Ricardo, Spa Capilar.
+Pacotes com preco diferenciado pois ja encomendamos antecipado TODOS os produtos do protocolo do paciente.
+
+1. PADRAO: R$ 10.000 - cartao 12x (juros automaticos), sem uso de imagem
+2. A VISTA: R$ 9.500 - dinheiro/Pix, sem uso de imagem
+3. A VISTA SEM ROSTO: R$ 9.300 - dinheiro/Pix, fotos sem rosto autorizadas
+4. PACIENTE MODELO: R$ 8.000 - 12x SEM juros, autoriza imagem com rosto + 3 depoimentos video
+
+MINIMO ABSOLUTO: R$ 8.000. NUNCA oferecer abaixo sem orientacao expressa do Dr.
+
+## TRATAMENTOS CAPILARES (avulso e pacote)
+- MMP avulso: R$ 400 a R$ 600 por sessao (varia conforme insumos da formula)
+- MMP pacote: R$ 3.500 por 6 sessoes mensais (cerca de R$ 583/sessao, inclui Spa Capilar)
+- Mesoterapia avulso: R$ 400 a R$ 500 por sessao
+- Mesoterapia pacote: R$ 2.500 por 6 sessoes mensais (cerca de R$ 416/sessao, inclui Spa Capilar)
+
+Pacote tem preco diferenciado porque encomendamos antecipado todos os insumos do protocolo completo do paciente.
+
+# LOGICA DE AGENDAMENTO
+Ordem de oferta (Rio Bonito):
+1. TERCA 13h (sempre primeira opcao)
+2. QUINTA 13h
+3. SEXTA 13h
+4. SEGUNDA 13h
+Quartas = Niteroi. Sabados = Barra (lista de espera).
+
+REGRAS:
+- Preencher dia inteiro antes de abrir proximo
+- Tarde antes de manha (13h, 14h, 15h, 16h, 17h)
+- Manha so abre quando tarde cheia (11h, 10h, 9h)
+- NUNCA deixar buraco entre agendamentos
+- 12h almoco = NUNCA agenda
+
+# CONTORNOS DE OBJECAO
+
+"ESTA CARO": "Entendo. A queda capilar e progressiva e irreversivel - cada mes perdendo e fio que nao volta. Temos opcoes: R$ 9.500 a vista (desconto R$ 500) ou R$ 8.000 no Programa Paciente Modelo (12x sem juros, com autorizacao de imagem). Qual encaixa melhor?"
+
+"VOU PENSAR": "Claro, pensar e importante. So te adianto: nossas vagas cirurgicas sao limitadas e sempre fecham. Posso deixar voce pre-agendado enquanto decide? Se mudar de ideia, libero sem problema."
+
+"MEDO DA CIRURGIA": "Medo e natural. O FUE e ambulatorial, anestesia local, voce vai pra casa no mesmo dia. Pos tranquilo, retoma rotina em 3-5 dias. Comece com consulta sem compromisso pra conhecer o Dr. Ricardo."
+
+"VOU COMPARAR": "Pesquisar e responsavel. So te peco comparar 4 coisas: quem executa a cirurgia, ha quanto tempo essa equipe faz transplante, estrutura do centro cirurgico, qual o acompanhamento pos (aqui sao 12 meses com Dr. Ricardo + 6 MMP). Media de mercado e R$18-20mil."
+
+"POR QUE TAO BARATO": "Nao e barato porque e ruim. E justo porque foi bem planejado. Escolhemos Rio Bonito como sede em vez da capital - custo operacional 10x menor, repassado pra voce. Mesma equipe altamente experiente de SP."
+
+"TEM DESCONTO": "Temos 3 formas de valor diferenciado: R$ 9.500 a vista; R$ 9.300 a vista com fotos sem rosto; R$ 8.000 Programa Paciente Modelo 12x sem juros. Qual faz sentido?"
+
+QUANDO PARAR: Apos 2-3 mensagens persuasivas sem engajamento: "Sem problemas. Vou deixar meu contato aqui. Quando quiser conversar, e so me chamar." NAO reenviar.
+
+# QUANDO LEAD CONVERTE
+Quando lead aceitar agendar, NAO feche sozinha. Passe pro Assistente Virtual.
+Avise o lead: "Otimo! Ja passei pro nosso atendimento principal, eles vao te chamar com a chave Pix do sinal."
+
+# REGRAS DE TOM
+- Nunca soar desesperada
+- Maximo 2 emojis por mensagem
+- Falar como gente, nao como bot
+- Usar "voce" sempre (nunca senhor/senhora)
+- Mensagens curtas, sem paredao de texto
+- Nunca prometer resultado especifico
+- Nunca fazer diagnostico
+- Nunca prescrever medicacao
+- Nunca interpretar exames
+- Nunca inventar informacao
+- Nunca apresentar valores antes de saber a unidade
+
+# REGRA DE NAO INVENTAR
+Quando lead fizer pergunta que voce nao sabe responder:
+- NUNCA inventar
+- Para o lead: "Deixa eu checar essa informacao pra te passar com certeza, um instantinho"
+- Aguardar consulta interna. Quando souber, retornar ao lead sem mencionar consulta.
+
+PRINCIPIO: melhor pedir "deixa eu checar" e demorar 2 horas pra responder certo, do que responder rapido e errado.`;
 
 const conversasAna = {};
 const WAHA_URL_BASE = "ht" + "tp://whatsapp-ana:3000";
@@ -1263,19 +836,11 @@ const WAHA_KEY = process.env.WHATSAPP_ANA_KEY || "";
 async function responderAna(chatId, mensagem) {
   if (!conversasAna[chatId]) conversasAna[chatId] = { historico: [] };
   const c = conversasAna[chatId];
-  if (c.pausado) {
-    console.log(`[ANA] ${chatId} pausado pelo dono — nao respondendo`);
-    return null;
-  }
+  if (c.pausado) { console.log(`[ANA] ${chatId} pausado pelo dono — nao respondendo`); return null; }
   c.historico.push({ role: "user", content: mensagem });
   if (c.historico.length > 20) c.historico = c.historico.slice(-20);
-
   try {
-    const reply = await chamarIAComFallback(
-      ANA_SYSTEM_PROMPT,
-      c.historico,
-      { maxTokens: 1000, temperature: 0.7, agente: "ANA" }
-    );
+    const reply = await chamarIAComFallback(ANA_SYSTEM_PROMPT, c.historico, { maxTokens: 1000, temperature: 0.7, agente: "ANA" });
     c.historico.push({ role: "assistant", content: reply });
     return reply;
   } catch (e) {
@@ -1284,41 +849,27 @@ async function responderAna(chatId, mensagem) {
   }
 }
 
-// Comandos do dono via WhatsApp da ANA (Dr. Ricardo manda do pessoal pra ANA)
 async function processarComandoAna(chatId, texto) {
   const t = texto.trim();
   const lower = t.toLowerCase();
-
   if (lower === "/ajuda" || lower === "ajuda") {
-    return "*ANA - modo dono*\n\n" +
-      "/status - resumo ANA\n" +
-      "/listar - lista conversas ANA ativas\n" +
-      "/historico [chatId] - ultimas 10 msgs de um chat\n" +
-      "/pausar [chatId] - pausa ANA pra esse chat\n" +
-      "/retomar [chatId] - retoma ANA pra esse chat\n" +
-      "/msg [chatId] [texto] - envia como ANA\n" +
-      "/limpar [chatId] - limpa historico\n\n" +
-      "Ou fale natural: \"quem ta esperando resposta?\" / \"manda X pra Fulana\"";
+    return "*ANA - modo dono*\n\n/status /listar /historico [cid] /pausar [cid] /retomar [cid] /msg [cid] [texto] /limpar [cid]\n\nOu fale natural.";
   }
-
   if (lower === "/status" || lower === "status") {
     const total = Object.keys(conversasAna).length;
     const pausados = Object.values(conversasAna).filter(c => c.pausado).length;
     const msgs = Object.values(conversasAna).reduce((s, c) => s + (c.historico||[]).length, 0);
     return `*ANA - Status*\nConversas: ${total}\nPausadas: ${pausados}\nTotal msgs: ${msgs}`;
   }
-
   if (lower === "/listar" || lower === "listar") {
     const chats = Object.entries(conversasAna);
     if (chats.length === 0) return "Nenhuma conversa ANA ativa.";
     const lista = chats.map(([cid, c], i) => {
       const ultima = (c.historico && c.historico.length) ? c.historico[c.historico.length-1].content.substring(0,60) : "-";
-      const flag = c.pausado ? " [PAUSADO]" : "";
-      return `${i+1}. ${cid}${flag}\nUltima: ${ultima}`;
+      return `${i+1}. ${cid}${c.pausado ? " [PAUSADO]" : ""}\nUltima: ${ultima}`;
     }).join("\n\n");
     return `*Conversas ANA* (${chats.length})\n\n${lista}`;
   }
-
   if (lower.startsWith("/historico ")) {
     const cid = t.substring(11).trim();
     const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
@@ -1327,11 +878,9 @@ async function processarComandoAna(chatId, texto) {
     const hist = c.historico.slice(-10).map(m => `[${m.role}] ${m.content.substring(0,150)}`).join("\n---\n");
     return `*${cidFinal}* (ultimas 10)\n\n${hist}`;
   }
-
   if (lower.startsWith("/msg ")) {
     const partes = t.substring(5).trim().split(/\s+/);
-    const cid = partes[0];
-    const msg = partes.slice(1).join(" ");
+    const cid = partes[0]; const msg = partes.slice(1).join(" ");
     if (!cid || !msg) return "Uso: /msg [chatId] [texto]";
     const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
     await enviarMsgAna(cidFinal, msg);
@@ -1339,7 +888,6 @@ async function processarComandoAna(chatId, texto) {
     conversasAna[cidFinal].historico.push({ role: "assistant", content: msg });
     return `Enviado pra ${cidFinal}.`;
   }
-
   if (lower.startsWith("/pausar ")) {
     const cid = t.substring(8).trim();
     const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
@@ -1347,48 +895,29 @@ async function processarComandoAna(chatId, texto) {
     conversasAna[cidFinal].pausado = true;
     return `ANA pausada para ${cidFinal}.`;
   }
-
   if (lower.startsWith("/retomar ")) {
     const cid = t.substring(9).trim();
     const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
     if (conversasAna[cidFinal]) conversasAna[cidFinal].pausado = false;
     return `ANA retomada para ${cidFinal}.`;
   }
-
   if (lower.startsWith("/limpar ")) {
     const cid = t.substring(8).trim();
     const cidFinal = cid.includes("@") ? cid : cid + "@c.us";
     if (conversasAna[cidFinal]) conversasAna[cidFinal].historico = [];
     return `Historico limpo: ${cidFinal}.`;
   }
-
-  // Linguagem natural - IA interpreta
   try {
-    const snap = {
-      total: Object.keys(conversasAna).length,
-      pausadas: Object.values(conversasAna).filter(c => c.pausado).length
-    };
-    const reply = await chamarIAComFallback(
-      `Voce e copiloto da ANA (bot de vendas FUE da Clinica HairTech). Dr. Ricardo te falou: "${t}". Estado ANA: ${JSON.stringify(snap)}. Comandos disponiveis: /status /listar /historico [chatId] /pausar [chatId] /retomar [chatId] /msg [chatId] [texto] /limpar [chatId] /ajuda. Responda direto e curto. Se for pedido de acao, sugira o comando exato.`,
-      [{ role: "user", content: t }],
-      { agente: "ANA_OWNER", maxTokens: 300 }
-    );
+    const snap = { total: Object.keys(conversasAna).length, pausadas: Object.values(conversasAna).filter(c => c.pausado).length };
+    const reply = await chamarIAComFallback(`Voce e copiloto da ANA. Dr. Ricardo te falou: "${t}". Estado: ${JSON.stringify(snap)}. Comandos: /status /listar /historico [cid] /pausar [cid] /retomar [cid] /msg [cid] [texto] /limpar [cid]. Responda direto e curto.`, [{ role: "user", content: t }], { agente: "ANA_OWNER", maxTokens: 300 });
     return reply;
-  } catch (e) {
-    return "Erro IA. Use /ajuda para comandos.";
-  }
+  } catch (e) { return "Erro IA. Use /ajuda para comandos."; }
 }
 
 async function enviarMsgAna(chatId, texto) {
   try {
-    await axios.post(
-      `${WAHA_URL_BASE}/api/sendText`,
-      { session: "default", chatId, text: texto },
-      { headers: { "X-Api-Key": WAHA_KEY }, timeout: 15000 }
-    );
-  } catch (e) {
-    console.error("[ANA] Erro WAHA send:", e.response?.data || e.message);
-  }
+    await axios.post(`${WAHA_URL_BASE}/api/sendText`, { session: "default", chatId, text: texto }, { headers: { "X-Api-Key": WAHA_KEY }, timeout: 15000 });
+  } catch (e) { console.error("[ANA] Erro WAHA send:", e.response?.data || e.message); }
 }
 
 app.post("/webhook/ana", async (req, res) => {
@@ -1397,24 +926,14 @@ app.post("/webhook/ana", async (req, res) => {
     const event = body.event || body.type || "";
     const payload = body.payload || body.data || body;
     console.log(`[ANA] webhook event="${event}" keys=${Object.keys(body).join(",")}`);
-
     if (payload.fromMe) return res.sendStatus(200);
-    if (!event || /status|ack|reaction|session|typing/i.test(event)) {
-      return res.sendStatus(200);
-    }
-
+    if (!event || /status|ack|reaction|session|typing/i.test(event)) return res.sendStatus(200);
     const chatId = (payload.from || payload.chatId || "").toString();
     const text = (payload.body || payload.text || payload.content || "").trim();
-
-    if (!text || !chatId || chatId.endsWith("@g.us") || chatId === "status@broadcast") {
-      return res.sendStatus(200);
-    }
-
-    // Deteccao do dono (Dr. Ricardo mandando do pessoal pra ANA)
+    if (!text || !chatId || chatId.endsWith("@g.us") || chatId === "status@broadcast") return res.sendStatus(200);
     const cleanId = chatId.replace(/[^0-9]/g, "");
     const ownerClean = (OWNER_PHONE || "").replace(/[^0-9]/g, "");
     const isOwner = ownerClean && cleanId === ownerClean;
-
     if (isOwner) {
       console.log(`[ANA-OWNER] cmd de ${chatId}: ${text.slice(0, 80)}`);
       res.sendStatus(200);
@@ -1427,10 +946,8 @@ app.post("/webhook/ana", async (req, res) => {
       }
       return;
     }
-
     console.log(`[ANA] msg de ${chatId}: ${text.slice(0, 80)}`);
     res.sendStatus(200);
-
     const resposta = await responderAna(chatId, text);
     if (resposta) await enviarMsgAna(chatId, resposta);
   } catch (e) {
@@ -1439,8 +956,7 @@ app.post("/webhook/ana", async (req, res) => {
   }
 });
 
-
 app.listen(PORT, () => {
-  console.log(`HairTech Bot v3.0 rodando na porta ${PORT}`);
+  console.log(`HairTech Bot v3.1 (SOUL v4.0) rodando na porta ${PORT}`);
   console.log(`Painel: /admin?senha=${ADMIN_PASS}`);
 });
