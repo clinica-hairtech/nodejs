@@ -2,9 +2,8 @@
 # auto-apply.sh — executado pelo cron de auto-deploy a cada commit novo.
 # Idempotente. Loga tudo em /var/log/hairtech-autodeploy.log.
 #
-# Round 3 (17/05/2026): Bridge provada funcional. Round 2 revelou que AV
-# para de rodar (transiente), causando hairtech.org/health -> 502.
-# Foco do v3: T2b reinicia AV se nao-running. T5 com URLs corretas. T6 robusto.
+# Round 4 (17/05/2026): instala watchdog AV permanente, garante self-healing
+# independente do auto-deploy. T0 e novo, demais tasks iguais ao v3.
 
 set +e
 
@@ -14,8 +13,30 @@ exec >> "$LOG" 2>&1
 REV=$(cd /home/user/nodejs && git rev-parse --short HEAD 2>/dev/null)
 echo ""
 echo "============================================================"
-echo "[$(date -Iseconds)] auto-apply.sh START rev=$REV v3"
+echo "[$(date -Iseconds)] auto-apply.sh START rev=$REV v4"
 echo "============================================================"
+
+# ---------------------------------------------------------------
+# T0 (NOVO): Watchdog AV — cron paralelo independente do auto-deploy
+# Reinicia assistente-virtual a cada 5 min se nao-running.
+# Idempotente: so instala se ainda nao existe o arquivo.
+# ---------------------------------------------------------------
+WATCHDOG=/etc/cron.d/hairtech-av-watchdog
+if [ ! -f "$WATCHDOG" ]; then
+  echo "[T0] Instalando watchdog do AV em $WATCHDOG"
+  cat > "$WATCHDOG" <<'WATCHEOF'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+*/5 * * * * root [ "$(docker inspect assistente-virtual --format '{{.State.Status}}' 2>/dev/null)" != "running" ] && (echo "[$(date -Iseconds)] AV nao-running, restartando" >> /var/log/hairtech-av-watchdog.log; docker start assistente-virtual >> /var/log/hairtech-av-watchdog.log 2>&1) || true
+WATCHEOF
+  chmod 644 "$WATCHDOG"
+  touch /var/log/hairtech-av-watchdog.log
+  chmod 640 /var/log/hairtech-av-watchdog.log
+  systemctl restart cron 2>/dev/null || service cron restart 2>/dev/null
+  echo "[T0] Watchdog instalado e cron reiniciado"
+else
+  echo "[T0] Watchdog ja instalado em $WATCHDOG"
+fi
 
 # ---------------------------------------------------------------
 # T1: Garantir Traefik rodando
@@ -48,8 +69,7 @@ for C in openai-proxy assistente-virtual hairtech-openclaw whatsapp-inbox dashbo
 done
 
 # ---------------------------------------------------------------
-# T2b (NOVO): AV recovery — se nao-running, start.
-# Run anterior reportou container c860a2c... is not running, causando 502.
+# T2b: AV recovery — se nao-running, start.
 # ---------------------------------------------------------------
 echo "[T2b] AV recovery check..."
 AV_STATE=$(docker inspect assistente-virtual --format '{{.State.Status}}' 2>/dev/null)
@@ -119,8 +139,6 @@ fi
 
 # ---------------------------------------------------------------
 # T5: Smoke test publico com URLs CORRETAS
-# (Round 2 usava /health em ia.hairtech.org — falso 502.
-#  Router real exige /v1-proxy/* com middleware stripprefix)
 # ---------------------------------------------------------------
 sleep 3
 echo "[T5] Smoke test publico:"
@@ -135,7 +153,7 @@ for URL in \
 done
 
 # ---------------------------------------------------------------
-# T6: Resumo de containers via docker ps -a (mais robusto que inspect)
+# T6: Resumo de containers via docker ps -a
 # ---------------------------------------------------------------
 echo "[T6] Containers (via docker ps -a):"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1 | sed 's/^/[T6] /'
