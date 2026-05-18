@@ -139,6 +139,7 @@ function navbar(senha, ativa) {
     { href: `/admin/status${q}`, label: "Status", id: "status" },
     { href: `/admin/handoff${q}`, label: "Handoff", id: "handoff" },
     { href: `/admin/aprovar-fila${q}`, label: "Fila", id: "aprovar-fila" },
+    { href: `/admin/templates${q}`, label: "Templates", id: "templates" },
     { href: `/admin/agendamentos${q}`, label: "Agenda", id: "agendamentos" },
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
     { href: `/admin/compliance${q}`, label: "Compliance", id: "compliance" },
@@ -915,6 +916,102 @@ ${navbar("", "dashboard")}
 </div></body></html>`);
   });
 
+  // ===== TEMPLATES de mensagem =====
+  const TMPL_FILE = path.join(__dirname, "data", "templates-msg.json");
+  function lerTemplates() {
+    try { return JSON.parse(fs.readFileSync(TMPL_FILE, "utf8")); }
+    catch (_) { return []; }
+  }
+
+  router.get("/templates", autenticar, (req, res) => {
+    const tpls = lerTemplates();
+    const categorias = [...new Set(tpls.map(t => t.categoria))];
+    const html = categorias.map(cat => {
+      const itens = tpls.filter(t => t.categoria === cat);
+      return `<div style="margin-bottom:28px">
+        <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px">${cat}</h2>
+        ${itens.map(t => `<div class="card" style="margin-bottom:10px;padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;margin-bottom:8px">
+            <div style="font-weight:600">${t.titulo}</div>
+            <button onclick="navigator.clipboard.writeText(this.parentElement.parentElement.querySelector('.txt').textContent).then(()=>{this.textContent='copiado';setTimeout(()=>this.textContent='Copiar',1500);})" class="btn" style="background:rgba(124,58,237,0.2);color:#a78bfa;font-size:11px;padding:6px 10px">Copiar</button>
+          </div>
+          <div class="txt" style="font-size:13px;color:rgba(255,255,255,0.7);white-space:pre-wrap;line-height:1.6">${t.texto.replace(/</g,"&lt;")}</div>
+        </div>`).join("")}
+      </div>`;
+    }).join("");
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Templates — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:980px;margin:0 auto;padding:32px 24px">
+${navbar("", "templates")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Templates de mensagem</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">Clique em "Copiar" e cole na conversa. Editar em <code>data/templates-msg.json</code>.</div>
+${html}
+</div></body></html>`);
+  });
+
+  // ===== FOTOS no prontuario =====
+  const FOTOS_DIR = path.join(__dirname, "prontuarios", "fotos");
+  try { fs.mkdirSync(FOTOS_DIR, { recursive: true }); } catch (_) {}
+
+  router.get("/prontuario/:numero/foto/:nome", autenticar, (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    const nome = path.basename(req.params.nome);
+    const arq = path.join(FOTOS_DIR, num, nome);
+    if (!arq.startsWith(FOTOS_DIR + path.sep + num)) return res.status(403).end();
+    if (!fs.existsSync(arq)) return res.status(404).end();
+    res.sendFile(arq);
+  });
+
+  router.post("/prontuario/:numero/foto", autenticar, async (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    const dir = path.join(FOTOS_DIR, num);
+    fs.mkdirSync(dir, { recursive: true });
+
+    // Recebe upload via multipart simples (sem dep multer - parse manual)
+    const chunks = [];
+    let total = 0;
+    const MAX = 12 * 1024 * 1024; // 12MB max
+    req.on("data", c => {
+      total += c.length;
+      if (total > MAX) {
+        try { req.destroy(); } catch (_) {}
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      if (total === 0) return res.redirect(`/admin/prontuario/${num}`);
+      const buf = Buffer.concat(chunks);
+      const ct = (req.headers["content-type"] || "");
+      const boundary = (ct.match(/boundary=(.+)/) || [])[1];
+      if (!boundary) return res.status(400).send("multipart faltando");
+      const partes = buf.toString("latin1").split(`--${boundary}`);
+      let salvas = 0;
+      for (const parte of partes) {
+        const m = parte.match(/Content-Disposition: form-data; name="foto"; filename="([^"]+)"\r\nContent-Type: ([^\r\n]+)/);
+        if (!m) continue;
+        const filename = m[1];
+        const ext = (filename.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (!["jpg","jpeg","png","webp","heic"].includes(ext)) continue;
+        const idx = parte.indexOf("\r\n\r\n");
+        if (idx < 0) continue;
+        const conteudo = Buffer.from(parte.slice(idx + 4, parte.length - 2), "latin1");
+        const nomeArq = `${Date.now()}-${Math.floor(Math.random()*9999)}.${ext}`;
+        fs.writeFileSync(path.join(dir, nomeArq), conteudo);
+
+        // Adiciona ao prontuario JSON
+        const p = lerProntuario(num);
+        p.fotos = p.fotos || [];
+        p.fotos.push({ arquivo: nomeArq, enviada_em: new Date().toISOString(), tamanho: conteudo.length });
+        salvarProntuario(num, p);
+        salvas++;
+      }
+      res.redirect(`/admin/prontuario/${num}`);
+    });
+    req.on("error", () => res.status(500).end());
+  });
+
   // ===== AGENDA-LINK (URL secreta do feed ICS pra assinar no app de calendar) =====
   router.get("/agenda-link", autenticar, (req, res) => {
     const token = process.env.AGENDA_ICS_TOKEN || "trocar-este-token-no-env";
@@ -1192,6 +1289,11 @@ ${navbar("", "prontuario")}
       <div style="font-size:13px;color:rgba(255,255,255,0.7);white-space:pre-wrap">${co.observacoes || ""}</div>
     </div>`).join("") || '<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.4)">Sem consultas registradas</div>';
 
+    const fotosHTML = (p.fotos || []).map(f => `<a href="/admin/prontuario/${num}/foto/${f.arquivo}" target="_blank" style="display:block">
+      <img src="/admin/prontuario/${num}/foto/${f.arquivo}" style="width:100%;border-radius:10px;border:1px solid rgba(255,255,255,0.1);object-fit:cover;aspect-ratio:1"/>
+      <div style="font-size:10px;color:rgba(255,255,255,0.4);text-align:center;margin-top:4px">${new Date(f.enviada_em).toLocaleDateString("pt-BR")}</div>
+    </a>`).join("");
+
     res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${c.nome || num} — Prontuario</title><style>${CSS_BASE}.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:18px}</style></head>
 <body><div style="max-width:1280px;margin:0 auto;padding:32px 24px">
@@ -1228,6 +1330,14 @@ ${navbar("", "prontuario")}
     <div class="card" style="padding:20px;margin-bottom:14px">
       <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Consultas (${(p.consultas||[]).length})</h2>
       ${consultasHTML}
+    </div>
+    <div class="card" style="padding:20px;margin-bottom:14px">
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Fotos (${(p.fotos||[]).length})</h2>
+      ${fotosHTML ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:14px">${fotosHTML}</div>` : '<div style="color:rgba(255,255,255,0.4);font-size:13px;margin-bottom:14px">Sem fotos ainda</div>'}
+      <form method="POST" action="/admin/prontuario/${num}/foto" enctype="multipart/form-data">
+        <input type="file" name="foto" accept="image/*" required style="margin-bottom:10px"/>
+        <button type="submit" class="btn" style="background:rgba(236,72,153,0.3);border-color:rgba(236,72,153,0.5);color:#f9a8d4;width:100%;justify-content:center">Adicionar foto</button>
+      </form>
     </div>
     <div class="card" style="padding:20px">
       <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Conversa WhatsApp (ultimas 30 msgs)</h2>
@@ -1707,6 +1817,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/agendamentos", titulo: "Agenda", desc: "Consultas e procedimentos dos proximos 60 dias", cor: "#3b82f6", icon: "📅" },
       { href: "/admin/agenda-link", titulo: "Sincronizar celular", desc: "Conecta agenda HairTech ao Apple/Google Calendar do seu telefone", cor: "#06b6d4", icon: "📲" },
       { href: "/admin/dashboard", titulo: "Dashboard executivo", desc: "Graficos de leads, receita, agendamentos (Chart.js)", cor: "#8b5cf6", icon: "📈" },
+      { href: "/admin/templates", titulo: "Templates", desc: "Mensagens prontas pra copiar e colar (12 templates pre-configurados)", cor: "#f97316", icon: "✂" },
       { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋" },
       { href: "/admin/lgpd", titulo: "LGPD", desc: "Status de conformidade com Lei 13.709/2018 + DPO", cor: "#84cc16", icon: "🔒" },
       { href: "/admin/audit", titulo: "Audit IA", desc: "Log CFM 2.454/2026 de todas as chamadas de IA (retencao 5 anos)", cor: "#94a3b8", icon: "📝" },

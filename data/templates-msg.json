@@ -1,0 +1,74 @@
+[
+  {
+    "id": "boas-vindas",
+    "categoria": "abertura",
+    "titulo": "Boas-vindas geral",
+    "texto": "Ola! Obrigado por entrar em contato com a Clinica HairTech. Em que posso te ajudar hoje?"
+  },
+  {
+    "id": "avaliacao-foto",
+    "categoria": "avaliacao",
+    "titulo": "Pedir foto pra avaliacao",
+    "texto": "Pra eu te dar uma orientacao melhor sobre seu caso, pode me enviar 3 fotos:\n\n1. Coroa (topo da cabeca) iluminada\n2. Entradas (frente)\n3. Lateral esquerda\n\nUse luz natural se possivel. Bora?"
+  },
+  {
+    "id": "preco-mmp-avulso",
+    "categoria": "preco",
+    "titulo": "Preco MMP avulso",
+    "texto": "O MMP (microagulhamento medicamentoso) avulso fica entre R$ 400 e R$ 600 por sessao. Trabalhamos tambem com pacote de 6 sessoes (recomendado clinicamente) com preco diferenciado porque ja encomendamos todo o protocolo do paciente em um lote so. Quer saber mais sobre o pacote?"
+  },
+  {
+    "id": "preco-mesoterapia-avulso",
+    "categoria": "preco",
+    "titulo": "Preco Mesoterapia avulso",
+    "texto": "A mesoterapia capilar avulsa fica entre R$ 400 e R$ 500 por sessao. No pacote de 6 sessoes o valor sai menor porque encomendamos os ativos do protocolo de uma vez. Posso te passar valores do pacote?"
+  },
+  {
+    "id": "pacotes-fue",
+    "categoria": "preco",
+    "titulo": "Pacotes FUE",
+    "texto": "Trabalhamos com 4 pacotes de transplante FUE, todos ja incluem:\n\n- Cirurgia FUE\n- 6 sessoes de MMP pos-cirurgico\n- 12 meses de acompanhamento com Dr. Ricardo\n- Spa Capilar (lavagens supervisionadas)\n\nO valor varia conforme densidade desejada e numero de unidades foliculares. Pra te passar o orcamento certo, preciso de algumas fotos da regiao. Pode mandar?"
+  },
+  {
+    "id": "pos-fue-d1",
+    "categoria": "pos-op",
+    "titulo": "Pos-op D+1",
+    "texto": "Bom dia! Como esta a area operada? Lembrando:\n\n- NAO molhar a cabeca hoje\n- Dormir de barriga pra cima\n- Tomar analgesico se sentir dor\n- Qualquer sangramento ou febre, me avisa imediatamente\n\nVoce esta bem?"
+  },
+  {
+    "id": "pos-fue-d7",
+    "categoria": "pos-op",
+    "titulo": "Pos-op D+7 (lavagem)",
+    "texto": "Hoje completa 1 semana! A partir de agora voce pode lavar com sabonete neutro pelas pontas dos dedos, agua morna, sem esfregar. As crostas vao sair sozinhas nos proximos 7-10 dias. NAO arrancar de jeito nenhum. Tudo bem ate aqui?"
+  },
+  {
+    "id": "shock-loss",
+    "categoria": "pos-op",
+    "titulo": "Tranquilizar shock loss D+15",
+    "texto": "Atencao - nas proximas semanas voce vai notar que os fios transplantados estao caindo. Isso e o SHOCK LOSS e e completamente NORMAL e esperado.\n\nOs foliculos seguem vivos e vao brotar novamente entre o 3o e 4o mes. O resultado final aparece entre 9 e 12 meses. Calma e paciencia ;)"
+  },
+  {
+    "id": "agendamento-confirmar",
+    "categoria": "agenda",
+    "titulo": "Confirmar agendamento",
+    "texto": "Confirmando sua consulta amanha as XX:XX com Dr. Ricardo. Endereco: [endereco]. Por favor, chegue 10 min antes. Posso confirmar?"
+  },
+  {
+    "id": "no-show",
+    "categoria": "agenda",
+    "titulo": "No-show retomada",
+    "texto": "Notei que voce nao conseguiu vir hoje. Tudo bem? Quer reagendar pra outro dia? Tenho horarios essa semana."
+  },
+  {
+    "id": "encaminhamento-medico",
+    "categoria": "clinico",
+    "titulo": "Encaminhar pro medico",
+    "texto": "Pelo que voce descreveu, prefiro que o Dr. Ricardo avalie pessoalmente antes de eu te orientar. Posso te marcar com ele essa semana?"
+  },
+  {
+    "id": "humano-handoff",
+    "categoria": "controle",
+    "titulo": "Passar pra atendente humano",
+    "texto": "Vou te conectar com nossa atendente humana agora pra continuar daqui. So um momento, ela ja te responde."
+  }
+]
