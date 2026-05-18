@@ -616,7 +616,10 @@ ${navbar("", "prontuario")}
       <textarea name="anamnese" rows="6" style="margin-bottom:12px" placeholder="QP, HMA, antecedentes, exame fisico...">${p.anamnese || ""}</textarea>
       <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Conduta / Plano</h2>
       <textarea name="conduta" rows="4" style="margin-bottom:14px" placeholder="Protocolo, prescricao, retorno...">${p.conduta || ""}</textarea>
-      <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#a78bfa;width:100%;justify-content:center">Salvar</button>
+      <div style="display:flex;gap:8px">
+        <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#a78bfa;flex:1;justify-content:center">Salvar</button>
+        <a href="/admin/prontuario/${num}/laudo" target="_blank" class="btn" style="background:rgba(16,185,129,0.3);border-color:rgba(16,185,129,0.5);color:#34d399">Gerar laudo PDF</a>
+      </div>
     </form>
     <form method="POST" action="/admin/prontuario/${num}/consulta" class="card" style="padding:20px">
       <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Nova consulta</h2>
@@ -647,6 +650,91 @@ ${navbar("", "prontuario")}
     p.atualizado_em = new Date().toISOString();
     salvarProntuario(num, p);
     res.redirect(`/admin/prontuario/${num}`);
+  });
+
+  // ===== LAUDO PDF (print-friendly, sem npm dep) =====
+  // Usuario abre no browser e usa Imprimir > Salvar como PDF.
+  // Pra valor legal pleno: assinar PDF gerado com e-CPF (Adobe Reader, ASSINA Brasil, etc).
+  router.get("/prontuario/:numero/laudo", autenticar, (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    const c = conversas[num] || {};
+    const p = lerProntuario(num);
+    const hoje = new Date().toLocaleDateString("pt-BR");
+    const clinica = process.env.CLINICA_NOME || "Clinica HairTech";
+    const medico = process.env.MEDICO_NOME || "Dr. Ricardo Meireles Marcelino";
+    const crm = process.env.MEDICO_CRM || "CRM-RJ XX.XXX";
+    const endereco = process.env.CLINICA_ENDERECO || "Rio de Janeiro - RJ";
+
+    const consultasHTML = (p.consultas || []).map(co => `
+      <tr><td style="padding:8px;border:1px solid #ccc;width:120px;vertical-align:top">${co.data}</td>
+      <td style="padding:8px;border:1px solid #ccc;width:140px;vertical-align:top">${co.tipo || "consulta"}</td>
+      <td style="padding:8px;border:1px solid #ccc;white-space:pre-wrap">${(co.observacoes||"").replace(/</g,"&lt;")}</td></tr>`).join("");
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"/><title>Laudo - ${c.nome || num}</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  @media print { .no-print { display:none } body { color:#000 } }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color:#222; max-width:780px; margin:30px auto; padding:0 20px; line-height:1.5 }
+  h1 { font-size:18px; margin:0 0 6px; letter-spacing:-0.3px }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:1px; color:#666; border-bottom:1px solid #ccc; padding-bottom:4px; margin:24px 0 10px }
+  .header { display:flex; justify-content:space-between; border-bottom:2px solid #222; padding-bottom:12px; margin-bottom:20px }
+  .meta { font-size:12px; color:#666 }
+  .field { margin:8px 0; font-size:13px }
+  .field strong { display:inline-block; min-width:140px; color:#444 }
+  .box { background:#fafafa; border:1px solid #ddd; padding:12px; border-radius:6px; white-space:pre-wrap; font-size:13px; min-height:60px }
+  table { border-collapse:collapse; width:100%; font-size:12px; margin-top:6px }
+  .assinatura { margin-top:60px; text-align:center; font-size:12px }
+  .assinatura .linha { border-top:1px solid #222; width:280px; margin:0 auto 4px; padding-top:4px }
+  .no-print { background:#fef3c7; border:1px solid #f59e0b; padding:10px 14px; border-radius:8px; margin-bottom:20px; font-size:13px }
+</style></head>
+<body>
+<div class="no-print">
+  Use <strong>Imprimir</strong> (Ctrl/Cmd + P) e <strong>Salvar como PDF</strong>. Depois assine com seu e-CPF (Adobe Reader, ASSINA Brasil, ou Acrobat Sign).
+  <button onclick="window.print()" style="margin-left:12px;padding:6px 14px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer">Imprimir</button>
+</div>
+
+<div class="header">
+  <div>
+    <h1>${clinica}</h1>
+    <div class="meta">${endereco}</div>
+  </div>
+  <div class="meta" style="text-align:right">
+    Documento emitido em<br/><strong>${hoje}</strong>
+  </div>
+</div>
+
+<h1 style="text-align:center;margin:20px 0">Relatorio Medico</h1>
+
+<h2>Identificacao do paciente</h2>
+<div class="field"><strong>Nome:</strong> ${c.nome || "—"}</div>
+<div class="field"><strong>Contato:</strong> +${num}</div>
+<div class="field"><strong>Origem:</strong> ${c.origem || "WhatsApp"}</div>
+
+<h2>Anamnese</h2>
+<div class="box">${(p.anamnese || "—").replace(/</g,"&lt;")}</div>
+
+<h2>Conduta / Plano terapeutico</h2>
+<div class="box">${(p.conduta || "—").replace(/</g,"&lt;")}</div>
+
+${consultasHTML ? `<h2>Historico de consultas</h2>
+<table>
+  <thead><tr style="background:#f0f0f0">
+    <th style="padding:8px;border:1px solid #ccc;text-align:left">Data</th>
+    <th style="padding:8px;border:1px solid #ccc;text-align:left">Tipo</th>
+    <th style="padding:8px;border:1px solid #ccc;text-align:left">Observacoes</th>
+  </tr></thead>
+  <tbody>${consultasHTML}</tbody>
+</table>` : ""}
+
+<div class="assinatura">
+  <div class="linha"></div>
+  <strong>${medico}</strong><br/>
+  ${crm}
+  <div style="font-size:10px;color:#888;margin-top:8px">Para validade legal plena, este documento deve ser assinado digitalmente com certificado ICP-Brasil (e-CPF).</div>
+</div>
+
+</body></html>`);
   });
 
   router.post("/prontuario/:numero/consulta", autenticar, (req, res) => {
