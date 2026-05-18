@@ -131,6 +131,12 @@ if [ -f "$OC_CFG" ]; then
       if [ ! -f "$OC_FLAG" ]; then
         touch "$OC_FLAG"
         echo "[T23]   provider anthropic mergeado + key presente -> ANTHROPIC_READY.flag criado"
+        TG_TOKEN="${TELEGRAM_BOT_TOKEN:-8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ}"
+        TG_CHAT="${TELEGRAM_CHAT_ID:-8713631351}"
+        curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+          --data-urlencode "chat_id=${TG_CHAT}" \
+          --data-urlencode "text=HairTech: OpenClaw armado (Anthropic + 13 agentes sincronizando). rev=$REV" \
+          > /dev/null 2>&1
       else
         echo "[T23]   ANTHROPIC_READY.flag ja existe (ok)"
       fi
@@ -176,6 +182,28 @@ if [ -f "$FLAG_ANTHROPIC" ] && [ -d /home/user/nodejs/docs/agents ]; then
   ls -la "$AGENTS_DIR" 2>&1 | head -20 | sed 's/^/[T22]   /'
 else
   echo "[T22] sem ANTHROPIC_READY.flag ou docs/agents - skip"
+fi
+
+# T24 (Round 15): Health probe OpenClaw apos T22.
+# Se OpenClaw esta running mas /health nao responde, faz UM restart e ressincroniza.
+echo "[T24] OpenClaw health probe:"
+OC_RUNNING=$(docker inspect hairtech-openclaw --format '{{.State.Status}}' 2>/dev/null)
+if [ "$OC_RUNNING" = "running" ]; then
+  HEALTH_CODE=$(docker exec hairtech-openclaw curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:18789/health 2>/dev/null)
+  HEALTH_CODE=${HEALTH_CODE:-000}
+  echo "[T24]   /health HTTP=$HEALTH_CODE"
+  if [ "$HEALTH_CODE" != "200" ] && [ -f "$OC_FLAG" ]; then
+    HEAL_MARK=/tmp/hairtech-openclaw-heal-$(date +%Y%m%d%H)
+    if [ ! -f "$HEAL_MARK" ]; then
+      touch "$HEAL_MARK"
+      echo "[T24]   health=$HEALTH_CODE -> docker restart (1x/hora max)"
+      docker restart hairtech-openclaw 2>&1 | sed 's/^/[T24] /'
+    else
+      echo "[T24]   ja tentou healing nesta hora, skip"
+    fi
+  fi
+else
+  echo "[T24]   nao running (state=$OC_RUNNING) - skip"
 fi
 
 echo "[$(date -Iseconds)] auto-apply.sh END (v10 Round 15)"

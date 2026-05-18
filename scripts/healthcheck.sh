@@ -46,18 +46,39 @@ if [ "$T_STATE" != "running" ]; then
 "
 fi
 
-# Check 4: OpenClaw
+# Check 4: OpenClaw (com self-heal 1x/hora)
 OC_STATE=$(docker inspect hairtech-openclaw --format '{{.State.Status}}' 2>/dev/null)
-if [ "$OC_STATE" != "running" ]; then
-  PROBLEMS="${PROBLEMS}- OpenClaw state=$OC_STATE
+if [ "$OC_STATE" != "running" ] && [ -n "$OC_STATE" ]; then
+  HEAL_MARK=/tmp/hairtech-oc-selfheal-$(date +%Y%m%d%H)
+  if [ ! -f "$HEAL_MARK" ]; then
+    touch "$HEAL_MARK"
+    docker start hairtech-openclaw > /dev/null 2>&1
+    sleep 5
+    OC_STATE=$(docker inspect hairtech-openclaw --format '{{.State.Status}}' 2>/dev/null)
+    echo "[$TS] OpenClaw self-heal tentado, new_state=$OC_STATE"
+  fi
+  if [ "$OC_STATE" != "running" ]; then
+    LOG_SNIPPET=$(docker logs hairtech-openclaw --tail 20 2>&1 | tail -6)
+    PROBLEMS="${PROBLEMS}- OpenClaw state=$OC_STATE (self-heal falhou). Logs: ${LOG_SNIPPET}
 "
+  fi
 fi
 
-# Check 5: WAHA ANA (preserva pareamento)
+# Check 5: WAHA ANA (preserva pareamento - SO docker start, NUNCA restart)
 WA_STATE=$(docker inspect whatsapp-ana --format '{{.State.Status}}' 2>/dev/null)
-if [ "$WA_STATE" != "running" ]; then
-  PROBLEMS="${PROBLEMS}- WAHA ANA state=$WA_STATE (pareamento pode ter perdido)
+if [ "$WA_STATE" != "running" ] && [ -n "$WA_STATE" ]; then
+  HEAL_MARK=/tmp/hairtech-wa-selfheal-$(date +%Y%m%d%H)
+  if [ ! -f "$HEAL_MARK" ] && [ "$WA_STATE" = "exited" ]; then
+    touch "$HEAL_MARK"
+    docker start whatsapp-ana > /dev/null 2>&1
+    sleep 8
+    WA_STATE=$(docker inspect whatsapp-ana --format '{{.State.Status}}' 2>/dev/null)
+    echo "[$TS] WAHA ANA self-heal (docker start) tentado, new_state=$WA_STATE"
+  fi
+  if [ "$WA_STATE" != "running" ]; then
+    PROBLEMS="${PROBLEMS}- WAHA ANA state=$WA_STATE (pareamento pode ter perdido)
 "
+  fi
 fi
 
 # Check 6: Webhook Meta publico (so se ALLOW_RESTART)
