@@ -1,10 +1,42 @@
 const express = require("express");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const router = express.Router();
 const db = require("./db");
 
 const ADMIN_PASS = process.env.ADMIN_PASS || "hairtech2026";
+const SESSION_COOKIE = "ht_session";
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const sessoes = new Map();
+
+setInterval(() => {
+  const agora = Date.now();
+  for (const [t, s] of sessoes) if (s.expira < agora) sessoes.delete(t);
+}, 60 * 60 * 1000);
+
+function lerCookie(req, nome) {
+  const raw = req.headers.cookie || "";
+  for (const part of raw.split(";")) {
+    const [k, ...rest] = part.trim().split("=");
+    if (k === nome) return rest.join("=");
+  }
+  return null;
+}
+
+function sessaoValida(req) {
+  const token = lerCookie(req, SESSION_COOKIE);
+  if (!token) return null;
+  const s = sessoes.get(token);
+  if (!s || s.expira < Date.now()) { sessoes.delete(token); return null; }
+  return { token, ...s };
+}
+
+function setCookieSessao(res, token, secure) {
+  const flags = [`${SESSION_COOKIE}=${token}`, "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${SESSION_TTL_MS/1000}`];
+  if (secure) flags.push("Secure");
+  res.setHeader("Set-Cookie", flags.join("; "));
+}
 
 const DOT_TEMP   = { quente: "#ff3b30", morno: "#ff9f0a", frio: "#8e8e93" };
 const COR_TEMP   = { quente: "rgba(255,59,48,0.2)", morno: "rgba(255,159,10,0.2)", frio: "rgba(120,120,128,0.15)" };
@@ -42,35 +74,69 @@ th{padding:12px 16px;text-align:left;font-size:11px;color:rgba(255,255,255,0.3);
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:4px}
 `;
 
-function autenticar(req, res, next) {
-  const senha = req.query.senha || req.body?.senha;
-  if (senha !== ADMIN_PASS) {
-    return res.status(401).send(`<!DOCTYPE html>
+function paginaLogin(erro) {
+  return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>HairTech</title>
+<title>HairTech — Entrar</title>
 <style>${CSS_BASE}body{display:flex;align-items:center;justify-content:center}</style>
 </head>
 <body>
-<div class="card" style="width:360px;padding:48px 40px">
-  <div style="font-size:22px;font-weight:700;margin-bottom:6px;letter-spacing:-0.5px">✦ HairTech</div>
-  <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:36px">Painel de Controle</div>
-  <form method="GET">
+<div class="card" style="width:380px;padding:48px 40px">
+  <div style="font-size:24px;font-weight:700;margin-bottom:6px;letter-spacing:-0.5px">✦ HairTech</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:36px">Ambiente Virtual</div>
+  ${erro ? `<div style="background:rgba(255,59,48,0.15);border:1px solid rgba(255,59,48,0.4);color:#ff6961;padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:16px">${erro}</div>` : ""}
+  <form method="POST" action="/admin/login">
     <input name="senha" type="password" placeholder="Senha de acesso" autofocus style="margin-bottom:12px"/>
     <button type="submit" class="btn" style="width:100%;justify-content:center;background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.2);font-size:15px;padding:14px">Entrar</button>
   </form>
+  <div style="font-size:11px;color:rgba(255,255,255,0.3);text-align:center;margin-top:20px">Sessao expira em 8h</div>
 </div>
-</body></html>`);
-  }
-  next();
+</body></html>`;
 }
 
+function autenticar(req, res, next) {
+  if (sessaoValida(req)) return next();
+  const senha = req.query.senha || req.body?.senha;
+  if (senha === ADMIN_PASS) return next();
+  if (req.method === "GET" && req.accepts("html")) {
+    return res.redirect(`/admin/login?next=${encodeURIComponent(req.originalUrl)}`);
+  }
+  return res.status(401).send(paginaLogin("Senha invalida"));
+}
+
+router.get("/login", (req, res) => {
+  if (sessaoValida(req)) return res.redirect("/admin/portal");
+  res.send(paginaLogin(null));
+});
+
+router.post("/login", (req, res) => {
+  const senha = (req.body?.senha || "").toString();
+  if (senha !== ADMIN_PASS) return res.status(401).send(paginaLogin("Senha invalida"));
+  const token = crypto.randomBytes(24).toString("hex");
+  sessoes.set(token, { user: "doctor", expira: Date.now() + SESSION_TTL_MS, criado: Date.now() });
+  const isHttps = (req.headers["x-forwarded-proto"] || req.protocol) === "https";
+  setCookieSessao(res, token, isHttps);
+  const next = req.query.next && req.query.next.startsWith("/admin") ? req.query.next : "/admin/portal";
+  res.redirect(next);
+});
+
+router.get("/logout", (req, res) => {
+  const s = sessaoValida(req);
+  if (s) sessoes.delete(s.token);
+  res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
+  res.redirect("/admin/login");
+});
+
 function navbar(senha, ativa) {
+  const q = senha ? `?senha=${senha}` : "";
   const links = [
-    { href: `/admin?senha=${senha}`, label: "Dashboard", id: "dash" },
-    { href: `/admin/kanban?senha=${senha}`, label: "Pipeline", id: "kanban" },
-    { href: `/admin/status?senha=${senha}`, label: "Status", id: "status" },
-    { href: `/admin/exportar?senha=${senha}`, label: "↓ CSV", id: "csv" },
+    { href: `/admin/portal`, label: "Portal", id: "portal" },
+    { href: `/admin${q}`, label: "Dashboard", id: "dash" },
+    { href: `/admin/kanban${q}`, label: "Pipeline", id: "kanban" },
+    { href: `/admin/status${q}`, label: "Status", id: "status" },
+    { href: `/admin/handoff${q}`, label: "Handoff", id: "handoff" },
+    { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
   return `
 <nav style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px;flex-shrink:0">
@@ -602,6 +668,114 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       db.salvarConversa(numero, conversas[numero]).catch(() => {});
     }
     res.redirect(`/admin?senha=${req.query.senha}`);
+  });
+
+  // ===== PORTAL (landing pos-login) =====
+  router.get("/portal", autenticar, (req, res) => {
+    const cards = [
+      { href: "/admin", titulo: "Conversas", desc: "Dashboard de leads e atendimentos no WhatsApp", cor: "#7c3aed", icon: "💬" },
+      { href: "/admin/kanban", titulo: "Pipeline", desc: "Kanban de oportunidades por status", cor: "#06b6d4", icon: "📊" },
+      { href: "/admin/status", titulo: "Status do sistema", desc: "Saude dos containers, OpenClaw, agentes", cor: "#10b981", icon: "💚" },
+      { href: "/admin/handoff", titulo: "Handoff ao vivo", desc: "Assumir o controle quando OpenClaw pedir CAPTCHA / login", cor: "#f59e0b", icon: "🖐" },
+      { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
+      { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },
+    ];
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Portal — HairTech</title>
+<style>${CSS_BASE}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.tile{padding:24px;border-radius:18px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);transition:all .25s;text-decoration:none;color:#fff;display:block;cursor:pointer}
+.tile:hover{transform:translateY(-3px);background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2)}
+.tile .ico{font-size:30px;margin-bottom:10px}
+.tile .ttl{font-size:18px;font-weight:600;margin-bottom:4px}
+.tile .dsc{font-size:13px;color:rgba(255,255,255,0.5);line-height:1.5}
+</style></head>
+<body><div style="max-width:1200px;margin:0 auto;padding:40px 24px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="font-size:28px;font-weight:700;letter-spacing:-0.5px">✦ HairTech</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-top:4px">Ambiente Virtual da clinica</div>
+    </div>
+    <a href="/admin/logout" class="btn" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.12);color:rgba(255,255,255,0.6)">Sair</a>
+  </div>
+  <div class="grid">
+    ${cards.map(c => `<a class="tile" href="${c.href}" style="border-left:3px solid ${c.cor}">
+      <div class="ico" style="color:${c.cor}">${c.icon}</div>
+      <div class="ttl">${c.titulo}</div>
+      <div class="dsc">${c.desc}</div>
+    </a>`).join("")}
+  </div>
+</div></body></html>`);
+  });
+
+  // ===== HANDOFF (placeholder) =====
+  // Quando OpenClaw / agentes batem em CAPTCHA, login manual ou prova de humano,
+  // eles registram aqui um pedido pendente. O Dr. assume e devolve.
+  router.get("/handoff", autenticar, (req, res) => {
+    let fila = [];
+    try {
+      fila = JSON.parse(fs.readFileSync(path.join(__dirname, "handoff-queue.json"), "utf8"));
+      if (!Array.isArray(fila)) fila = [];
+    } catch (_) { fila = []; }
+
+    const filaHTML = fila.length === 0
+      ? `<div style="padding:60px 20px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum pedido pendente.<br/><span style="font-size:12px">Quando OpenClaw precisar de CAPTCHA ou login manual, aparece aqui.</span></div>`
+      : fila.map(p => `<div class="card" style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:start;gap:14px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:600;margin-bottom:4px">${p.titulo || "Acao manual"}</div>
+              <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:8px">${p.descricao || ""}</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.35)">agente: ${p.agente || "?"} · solicitado: ${p.criado_em || "?"}</div>
+            </div>
+            ${p.url ? `<a class="btn" href="${p.url}" target="_blank" style="background:#f59e0b22;border-color:#f59e0b66;color:#f59e0b">Abrir →</a>` : ""}
+          </div>
+        </div>`).join("");
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Handoff — HairTech</title>
+<style>${CSS_BASE}</style></head>
+<body><div style="max-width:980px;margin:0 auto;padding:32px 24px">
+${navbar("", "handoff")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <h1 style="font-size:24px;font-weight:700">Handoff ao vivo</h1>
+  <a href="/admin/portal" style="color:rgba(255,255,255,0.5);font-size:13px;text-decoration:none">← Portal</a>
+</div>
+<div class="card" style="margin-bottom:24px;border-color:rgba(245,158,11,0.3)">
+  <div style="font-size:14px;color:#f59e0b;font-weight:600;margin-bottom:6px">Em construcao</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.6">
+    Esta pagina lista pedidos em que OpenClaw precisa de voce — CAPTCHA, login manual, prova de humano.<br/>
+    Visualizacao do browser remoto (estilo Manus) sera adicionada em <code>Round 16</code>: container Chrome headless + viewer noVNC com handoff bidirecional. Por enquanto, links abrem em nova aba.<br/>
+    Endpoint para agentes criarem pedido: <code>POST /admin/handoff</code> com {agente, titulo, descricao, url}.
+  </div>
+</div>
+${filaHTML}
+</div></body></html>`);
+  });
+
+  router.post("/handoff", autenticar, express.json(), (req, res) => {
+    const { agente, titulo, descricao, url } = req.body || {};
+    if (!titulo) return res.status(400).json({ error: "titulo obrigatorio" });
+    let fila = [];
+    const arquivo = path.join(__dirname, "handoff-queue.json");
+    try { fila = JSON.parse(fs.readFileSync(arquivo, "utf8")); if (!Array.isArray(fila)) fila = []; } catch (_) {}
+    fila.push({
+      id: crypto.randomBytes(8).toString("hex"),
+      agente: agente || "desconhecido",
+      titulo, descricao, url,
+      criado_em: new Date().toISOString(),
+    });
+    fs.writeFileSync(arquivo, JSON.stringify(fila.slice(-50), null, 2));
+    res.json({ ok: true, total: fila.length });
+  });
+
+  router.post("/handoff/:id/resolver", autenticar, (req, res) => {
+    const arquivo = path.join(__dirname, "handoff-queue.json");
+    let fila = [];
+    try { fila = JSON.parse(fs.readFileSync(arquivo, "utf8")); if (!Array.isArray(fila)) fila = []; } catch (_) {}
+    fila = fila.filter(p => p.id !== req.params.id);
+    fs.writeFileSync(arquivo, JSON.stringify(fila, null, 2));
+    res.redirect("/admin/handoff");
   });
 
   return router;
