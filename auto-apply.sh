@@ -45,9 +45,17 @@ done
 echo "[T6] Containers:"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}' 2>&1 | sed 's/^/[T6] /'
 
-# T8: Claude Code instalado
+# T8: Claude Code instalado / instala se faltar
 if command -v claude &>/dev/null; then
   echo "[T8] Claude Code ja instalado: $(claude --version 2>&1 | head -1)"
+else
+  if [ ! -f /opt/.claude-code-installed ] && [ -f /home/user/nodejs/scripts/install-claude-code.sh ]; then
+    echo "[T8] Claude Code ausente -> rodando installer (1x)"
+    chmod +x /home/user/nodejs/scripts/install-claude-code.sh
+    bash /home/user/nodejs/scripts/install-claude-code.sh 2>&1 | tail -3 | sed 's/^/[T8] /'
+  else
+    echo "[T8] Claude Code ausente (installer ja tentou ou nao encontrado)"
+  fi
 fi
 
 # T15: Backup pre-deploy
