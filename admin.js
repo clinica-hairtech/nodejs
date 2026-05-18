@@ -144,6 +144,7 @@ function navbar(senha, ativa) {
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
     { href: `/admin/compliance${q}`, label: "Compliance", id: "compliance" },
     { href: `/admin/lgpd${q}`, label: "LGPD", id: "lgpd" },
+    { href: `/admin/incidentes${q}`, label: "Incidentes", id: "incidentes" },
     { href: `/admin/audit${q}`, label: "Audit", id: "audit" },
     { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
@@ -544,6 +545,111 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
   });
 
+  // ===== INCIDENTES LGPD =====
+  const INC_FILE = path.join(__dirname, "data", "incidentes.json");
+  function lerIncidentes() {
+    try { return JSON.parse(fs.readFileSync(INC_FILE, "utf8")); }
+    catch (_) { return []; }
+  }
+  function salvarIncidentes(lista) { fs.writeFileSync(INC_FILE, JSON.stringify(lista, null, 2)); }
+
+  router.get("/incidentes", autenticar, (req, res) => {
+    const lista = lerIncidentes();
+    const items = lista.length === 0
+      ? `<div style="padding:60px 20px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum incidente registrado.<br/><span style="font-size:12px">Que continue assim.</span></div>`
+      : lista.slice().reverse().map(i => {
+          const cor = i.severidade === "alta" ? "#ef4444" : i.severidade === "media" ? "#f59e0b" : "#3b82f6";
+          return `<div class="card" style="margin-bottom:12px;padding:18px;border-left:3px solid ${cor}">
+            <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+              <div style="font-weight:600">${i.id} - ${i.categoria}</div>
+              <span class="tag" style="background:${cor}33;border-color:${cor}66;color:${cor}">${i.severidade}</span>
+            </div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:8px">${i.descricao}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.4);font-family:monospace">
+              ${i.data} · titulares afetados: ${i.titulares_afetados_estimado || 0} · ANPD: ${i.notificacao_anpd || "—"}
+            </div>
+          </div>`;
+        }).join("");
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Incidentes LGPD — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:980px;margin:0 auto;padding:32px 24px">
+${navbar("", "incidentes")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+  <h1 style="font-size:24px;font-weight:700">Incidentes LGPD</h1>
+  <a href="/admin/incidentes/novo" class="btn" style="background:rgba(239,68,68,0.2);color:#fca5a5">+ Registrar incidente</a>
+</div>
+<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:18px">Notificacao ANPD obrigatoria em 2 dias uteis para incidentes de risco relevante. Plano em <code>docs/PLANO-INCIDENTES.md</code>.</div>
+${items}
+</div></body></html>`);
+  });
+
+  router.get("/incidentes/novo", autenticar, (req, res) => {
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Novo incidente — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:780px;margin:0 auto;padding:32px 24px">
+${navbar("", "incidentes")}
+<h1 style="font-size:24px;margin:18px 0">Registrar incidente LGPD</h1>
+<form method="POST" action="/admin/incidentes" class="card" style="padding:24px">
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Categoria</label>
+  <select name="categoria" required style="margin-bottom:14px">
+    <option value="vazamento_credencial">Vazamento de credencial</option>
+    <option value="acesso_nao_autorizado">Acesso nao autorizado</option>
+    <option value="compromisso_container">Compromisso de container</option>
+    <option value="perda_dados">Perda de dados</option>
+    <option value="vazamento_pii_ia">Vazamento PII via IA</option>
+    <option value="exposicao_publica">Exposicao publica</option>
+    <option value="outro">Outro</option>
+  </select>
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Severidade</label>
+  <select name="severidade" required style="margin-bottom:14px">
+    <option value="baixa">Baixa</option>
+    <option value="media" selected>Media</option>
+    <option value="alta">Alta</option>
+  </select>
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Descricao</label>
+  <textarea name="descricao" rows="4" required style="margin-bottom:14px"></textarea>
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Titulares afetados (estimativa)</label>
+  <input name="titulares_afetados_estimado" type="number" min="0" value="0" style="margin-bottom:14px"/>
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Dados envolvidos (separados por virgula)</label>
+  <input name="dados_envolvidos" placeholder="nome, telefone, cpf, anamnese..." style="margin-bottom:14px"/>
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Contencao aplicada</label>
+  <textarea name="contencao_aplicada" rows="3" style="margin-bottom:18px"></textarea>
+  <button type="submit" class="btn" style="background:rgba(239,68,68,0.3);border-color:rgba(239,68,68,0.5);color:#fca5a5;width:100%;justify-content:center;padding:14px">Registrar</button>
+</form>
+</div></body></html>`);
+  });
+
+  router.post("/incidentes", autenticar, (req, res) => {
+    const lista = lerIncidentes();
+    const ano = new Date().getFullYear();
+    const numero = String(lista.filter(i => i.id.startsWith(`INC-${ano}`)).length + 1).padStart(3, "0");
+    const inc = {
+      id: `INC-${ano}-${numero}`,
+      data: new Date().toISOString(),
+      categoria: req.body?.categoria || "outro",
+      severidade: req.body?.severidade || "media",
+      descricao: (req.body?.descricao || "").toString(),
+      titulares_afetados_estimado: parseInt(req.body?.titulares_afetados_estimado || "0", 10),
+      dados_envolvidos: (req.body?.dados_envolvidos || "").toString().split(",").map(s => s.trim()).filter(Boolean),
+      contencao_aplicada: (req.body?.contencao_aplicada || "").toString(),
+      notificacao_anpd: null,
+      notificacao_titular: null,
+    };
+    lista.push(inc);
+    salvarIncidentes(lista);
+
+    // Telegram alerta crítico
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+    const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+    const txt = `🚨 INCIDENTE LGPD ${inc.id}\nCategoria: ${inc.categoria}\nSeveridade: ${inc.severidade}\n${inc.descricao}\n\nProtocolo: docs/PLANO-INCIDENTES.md\nANPD: 2 dias uteis se risco relevante`;
+    require("axios").post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+      chat_id: tgChat, text: txt,
+    }, { timeout: 5000 }).catch(() => {});
+
+    res.redirect("/admin/incidentes");
+  });
+
   // ===== LGPD: portabilidade (art. 18, V) =====
   // Doctor pode exportar dados de UM paciente em JSON pra atender solicitacao.
   router.get("/paciente/:numero/exportar-lgpd", autenticar, async (req, res) => {
@@ -625,9 +731,9 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       { ok: true, lbl: "Direito de portabilidade (art. 18, V)", det: "GET /admin/paciente/:numero/exportar-lgpd retorna JSON completo" },
       { ok: true, lbl: "Direito de exclusao (art. 18, VI)", det: "POST /admin/paciente/:numero/excluir-lgpd anonimiza + deleta" },
       { ok: true, lbl: "Log de acesso ao prontuario", det: "Tabela prontuario_access_log registra cada leitura (ts, wa_id, ip)" },
-      { ok: false, lbl: "RIPD (Relatorio de Impacto)", det: "Pendente - modelo ANPD em docs/LGPD-CONFORMIDADE.md" },
-      { ok: false, lbl: "Plano resposta a incidentes (notif ANPD 2d)", det: "Pendente - documentar processo" },
-      { ok: false, lbl: "Cadeia de processadores documentada", det: "Meta, Google, OpenAI, Anthropic, Hostinger - listado em docs" },
+      { ok: true, lbl: "RIPD (Relatorio de Impacto)", det: "docs/RIPD-RELATORIO-IMPACTO.md - revisao semestral marcada" },
+      { ok: true, lbl: "Plano resposta a incidentes", det: "docs/PLANO-INCIDENTES.md + /admin/incidentes para registro" },
+      { ok: true, lbl: "Cadeia de processadores documentada", det: "RIPD secao 6 - Meta, Google, OpenAI, Anthropic, Hostinger, B2" },
     ];
     const ok = itens.filter(i => i.ok).length;
     const total = itens.length;
@@ -1820,6 +1926,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/templates", titulo: "Templates", desc: "Mensagens prontas pra copiar e colar (12 templates pre-configurados)", cor: "#f97316", icon: "✂" },
       { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋" },
       { href: "/admin/lgpd", titulo: "LGPD", desc: "Status de conformidade com Lei 13.709/2018 + DPO", cor: "#84cc16", icon: "🔒" },
+      { href: "/admin/incidentes", titulo: "Incidentes", desc: "Registro de incidentes LGPD com notificacao ANPD", cor: "#dc2626", icon: "🚨" },
       { href: "/admin/audit", titulo: "Audit IA", desc: "Log CFM 2.454/2026 de todas as chamadas de IA (retencao 5 anos)", cor: "#94a3b8", icon: "📝" },
       { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
       { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },
