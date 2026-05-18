@@ -146,6 +146,7 @@ function navbar(senha, ativa) {
     { href: `/admin/compliance${q}`, label: "Compliance", id: "compliance" },
     { href: `/admin/lgpd${q}`, label: "LGPD", id: "lgpd" },
     { href: `/admin/incidentes${q}`, label: "Incidentes", id: "incidentes" },
+    { href: `/admin/help${q}`, label: "Ajuda", id: "help" },
     { href: `/admin/audit${q}`, label: "Audit", id: "audit" },
     { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
@@ -1881,6 +1882,85 @@ ${navbar("", "agentes")}
 <h1 style="font-size:22px;margin-bottom:18px">Invoke ${req.params.nome}</h1>
 <div class="card" style="white-space:pre-wrap;font-family:monospace;font-size:12px;color:rgba(255,255,255,0.7)">${JSON.stringify(r, null, 2)}</div>
 <a class="btn" href="/admin/agentes${senha?'?senha='+senha:''}" style="margin-top:18px;background:rgba(255,255,255,0.1)">← voltar</a>
+</div></body></html>`);
+  });
+
+  // ===== HELP / FEATURE INDEX =====
+  router.get("/help", autenticar, (req, res) => {
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Ajuda — HairTech</title><style>${CSS_BASE}.sec{margin-bottom:28px}.sec h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px}.row{display:flex;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.05);align-items:start;gap:12px}.row code{font-family:monospace;font-size:12px;color:#60a5fa;min-width:200px}.row .d{font-size:13px;color:rgba(255,255,255,0.65);flex:1}</style></head>
+<body><div style="max-width:1080px;margin:0 auto;padding:32px 24px">
+${navbar("", "help")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:8px">Ajuda - indice de funcionalidades</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">Todas as rotas e o que cada uma faz. Acesso por <code>/admin/login</code>.</div>
+
+<div class="sec"><h2>Atendimento</h2><div class="card" style="padding:0">
+  <div class="row"><code>/admin</code><div class="d">Lista de todas as conversas, filtros temperatura/status</div></div>
+  <div class="row"><code>/admin/kanban</code><div class="d">Pipeline visual estilo Trello</div></div>
+  <div class="row"><code>/admin/conversa/:numero</code><div class="d">Conversa individual, enviar msg, pausar/retomar/passar pra humano</div></div>
+  <div class="row"><code>/admin/templates</code><div class="d">12 mensagens prontas, botao copiar</div></div>
+  <div class="row"><code>/admin/broadcast</code><div class="d">Mensagem em massa segmentada (quentes/mornos/inativos/todos)</div></div>
+  <div class="row"><code>/admin/aprovar-fila</code><div class="d">Re-engajamento pro-ativo aguardando aprovacao do Dr.</div></div>
+  <div class="row"><code>/admin/handoff</code><div class="d">Pedidos OpenClaw precisando de CAPTCHA/login humano</div></div>
+</div></div>
+
+<div class="sec"><h2>Clinico</h2><div class="card" style="padding:0">
+  <div class="row"><code>/admin/prontuario</code><div class="d">Lista de pacientes</div></div>
+  <div class="row"><code>/admin/prontuario/:numero</code><div class="d">Ficha: anamnese, conduta, consultas, fotos, conversa</div></div>
+  <div class="row"><code>/admin/prontuario/:numero/laudo</code><div class="d">PDF print-friendly pra assinar com e-CPF</div></div>
+  <div class="row"><code>/admin/prontuario/:numero/prescrever</code><div class="d">Caminhos: CFM Prescricao Eletronica, Memed, Atesta CFM</div></div>
+  <div class="row"><code>/admin/prontuario/:numero/cobrar</code><div class="d">Gerar link Pix InfinityPay + envia via WhatsApp</div></div>
+  <div class="row"><code>/admin/agendamentos</code><div class="d">Calendario proximos 60d</div></div>
+  <div class="row"><code>/admin/agenda-link</code><div class="d">Sincronizar com Apple/Google Calendar (QR Code)</div></div>
+</div></div>
+
+<div class="sec"><h2>Operacional / Gestao</h2><div class="card" style="padding:0">
+  <div class="row"><code>/admin/dashboard</code><div class="d">Graficos Chart.js: leads, temperatura, agendamentos, receita</div></div>
+  <div class="row"><code>/admin/status</code><div class="d">Saude containers, OpenClaw, marker flags</div></div>
+  <div class="row"><code>/admin/agentes</code><div class="d">13 agentes OpenClaw com invoke de teste</div></div>
+  <div class="row"><code>/admin/compliance</code><div class="d">Vencimentos VPS, dominio, alvara, anuidade</div></div>
+  <div class="row"><code>/admin/exportar</code><div class="d">CSV de todos os leads</div></div>
+</div></div>
+
+<div class="sec"><h2>LGPD / Compliance</h2><div class="card" style="padding:0">
+  <div class="row"><code>/admin/lgpd</code><div class="d">Status (100% dos 14 itens implementados)</div></div>
+  <div class="row"><code>/admin/incidentes</code><div class="d">Registro de incidentes + notificacao ANPD</div></div>
+  <div class="row"><code>/admin/audit</code><div class="d">Log de chamadas IA (retencao 5 anos), export CSV</div></div>
+  <div class="row"><code>/admin/paciente/:numero/exportar-lgpd</code><div class="d">JSON com todos os dados (art. 18, V)</div></div>
+  <div class="row"><code>/admin/paciente/:numero/excluir-lgpd</code><div class="d">POST anonimiza + deleta (art. 18, VI)</div></div>
+  <div class="row"><code>/dpo</code><div class="d">Pagina publica do Encarregado de Dados</div></div>
+  <div class="row"><code>/privacidade</code><div class="d">Politica de Privacidade publica</div></div>
+  <div class="row"><code>/termos</code><div class="d">Termos de Uso publicos</div></div>
+</div></div>
+
+<div class="sec"><h2>Cron / Background</h2><div class="card" style="padding:0">
+  <div class="row"><code>auto-deploy</code><div class="d">A cada 2min: git pull + auto-apply.sh</div></div>
+  <div class="row"><code>healthcheck</code><div class="d">A cada 5min: Postgres/AV/Traefik/OC/WAHA + self-heal</div></div>
+  <div class="row"><code>proactive-crm</code><div class="d">Diario 10h: re-engajamento de leads inativos</div></div>
+  <div class="row"><code>proactive-pos</code><div class="d">Diario 9h: follow-up FUE D+1/3/7/15/30</div></div>
+  <div class="row"><code>proactive-fin</code><div class="d">Diario 18h: resumo financeiro Telegram</div></div>
+  <div class="row"><code>proactive-edu</code><div class="d">Segunda 8h: PubMed tricologia semanal</div></div>
+  <div class="row"><code>proactive-comp</code><div class="d">Segunda 8h05: vencimentos &lt;60 dias</div></div>
+</div></div>
+
+<div class="sec"><h2>API tecnica</h2><div class="card" style="padding:0">
+  <div class="row"><code>/agenda.ics?token=X</code><div class="d">Feed iCalendar (assinar em Apple/Google Calendar)</div></div>
+  <div class="row"><code>POST /admin/handoff</code><div class="d">Agentes registram pedido de CAPTCHA</div></div>
+  <div class="row"><code>GET /admin/cfm-token</code><div class="d">Token OAuth CFM (cache 4min) pro componente embarcado</div></div>
+  <div class="row"><code>POST /webhooks/infinitypay</code><div class="d">Webhook recebimento Pix InfinityPay</div></div>
+</div></div>
+
+<div class="sec"><h2>Acoes pendentes do Dr. (1 vez cada)</h2><div class="card" style="padding:18px;line-height:1.8;font-size:13px;color:rgba(255,255,255,0.75)">
+  1. <code>ssh root@72.62.100.6 -t 'claude login'</code> (depois Telegram confirmar instalacao)<br/>
+  2. Solicitar certificado A3 gratuito CFM: <a href="https://crmvirtual.cfm.org.br" target="_blank" style="color:#60a5fa">crmvirtual.cfm.org.br</a><br/>
+  3. Solicitar credenciais Prescricao CFM: <a href="https://sistemas.cfm.org.br/contatoprescricaoeletronica/br" target="_blank" style="color:#60a5fa">sistemas.cfm.org.br</a><br/>
+  4. Cadastrar no Memed: <a href="https://memed.com.br/integracao" target="_blank" style="color:#60a5fa">memed.com.br/integracao</a><br/>
+  5. Criar conta Backblaze B2 e colar credenciais no .env<br/>
+  6. Subir 3 JSONs de Flows no Meta Business Manager<br/>
+  7. Preencher CRM/CNPJ no /dpo (edita .env: MEDICO_CRM, MEDICO_NOME)<br/>
+  8. Renovar VPS antes 22/05 (4 dias)
+</div></div>
+
 </div></body></html>`);
   });
 
