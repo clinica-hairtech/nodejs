@@ -335,4 +335,22 @@ STATUS_FILE=/home/user/nodejs/status.json
 chmod 644 "$STATUS_FILE"
 echo "[T25] status.json escrito"
 
+# T30: Healthcheck v2 com cooldown + para AV em restart-loop.
+# Migra de /opt/healthcheck/check.sh antigo (sem cooldown) pro novo.
+# Tambem sinaliza fim do flood se houve mais de 30 alertas/dia recentes.
+if [ -f /home/user/nodejs/scripts/healthcheck.sh ]; then
+  if ! diff -q /home/user/nodejs/scripts/healthcheck.sh /opt/healthcheck/check.sh > /dev/null 2>&1; then
+    cp /home/user/nodejs/scripts/healthcheck.sh /opt/healthcheck/check.sh
+    chmod 755 /opt/healthcheck/check.sh
+    echo "[T30] healthcheck atualizado (v2 com cooldown)"
+    # Manda 1 notificacao do upgrade
+    TG_TOKEN="${TELEGRAM_BOT_TOKEN:-8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ}"
+    TG_CHAT="${TELEGRAM_CHAT_ID:-8713631351}"
+    curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${TG_CHAT}" \
+      --data-urlencode "text=HairTech: healthcheck v2 ativo - alertas agora tem cooldown 1h por categoria (fim do flood)." \
+      > /dev/null 2>&1
+  fi
+fi
+
 echo "[$(date -Iseconds)] auto-apply.sh END (v10 Round 15)"
