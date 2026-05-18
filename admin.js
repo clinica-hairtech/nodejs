@@ -142,6 +142,7 @@ function navbar(senha, ativa) {
     { href: `/admin/agendamentos${q}`, label: "Agenda", id: "agendamentos" },
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
     { href: `/admin/compliance${q}`, label: "Compliance", id: "compliance" },
+    { href: `/admin/lgpd${q}`, label: "LGPD", id: "lgpd" },
     { href: `/admin/audit${q}`, label: "Audit", id: "audit" },
     { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
@@ -540,6 +541,56 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       } catch (e) { console.error("Erro ao enviar do painel:", e.message); }
     }
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
+  });
+
+  // ===== LGPD (status visual) =====
+  router.get("/lgpd", autenticar, async (req, res) => {
+    const wflows = (() => { try { return require("./integrations/whatsapp-flows").status(); } catch (_) { return null; } })();
+    const itens = [
+      { ok: true, lbl: "Disclosure CFM 2.454/2026", det: "Primeira mensagem do bot informa uso de IA" },
+      { ok: true, lbl: "Audit log IA (5 anos)", det: "Tabela audit_ai_calls — viewer em /admin/audit" },
+      { ok: true, lbl: "Politica de Privacidade publica", det: "https://hairtech.org/privacidade" },
+      { ok: true, lbl: "Termos de Uso publicos", det: "https://hairtech.org/termos" },
+      { ok: true, lbl: "DPO designado e publico", det: "https://hairtech.org/dpo (precisa preencher CRM no .env)" },
+      { ok: true, lbl: "HTTPS obrigatorio", det: "Traefik + Let's Encrypt" },
+      { ok: true, lbl: "Backup encriptado em transito", det: "B2 via TLS + Postgres rede interna" },
+      { ok: true, lbl: "Hashing de prompts/respostas no audit", det: "PII nao em claro no audit log" },
+      { ok: false, lbl: "Criptografia em repouso (Postgres)", det: "Volume Docker normal - migrar pra LUKS ou pgcrypto coluna" },
+      { ok: false, lbl: "Anonimizacao de PII antes da IA", det: "Hoje envia nome do paciente no prompt" },
+      { ok: false, lbl: "Log de acesso ao prontuario", det: "Tabela prontuario_access_log nao criada" },
+      { ok: false, lbl: "RIPD (Relatorio de Impacto)", det: "Pendente - modelo ANPD em docs/LGPD-CONFORMIDADE.md" },
+      { ok: false, lbl: "Plano resposta a incidentes (notif ANPD 2d)", det: "Pendente - documentar processo" },
+      { ok: false, lbl: "Cadeia de processadores documentada", det: "Meta, Google, OpenAI, Anthropic, Hostinger - listado em docs" },
+    ];
+    const ok = itens.filter(i => i.ok).length;
+    const total = itens.length;
+    const pct = Math.round((ok / total) * 100);
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LGPD — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:980px;margin:0 auto;padding:32px 24px">
+${navbar("", "lgpd")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+  <h1 style="font-size:24px;font-weight:700">LGPD - conformidade</h1>
+  <div style="font-size:28px;font-weight:700;color:${pct>=80?'#22c55e':pct>=50?'#f59e0b':'#ef4444'}">${pct}%</div>
+</div>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">${ok} de ${total} itens. Documentacao completa em <code>docs/LGPD-CONFORMIDADE.md</code></div>
+
+<div class="card">
+${itens.map(i => `<div style="display:flex;align-items:start;gap:14px;padding:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+  <div style="font-size:18px;color:${i.ok?'#22c55e':'#8e8e93'}">${i.ok?'✓':'○'}</div>
+  <div style="flex:1">
+    <div style="font-size:14px;font-weight:500">${i.lbl}</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:2px">${i.det}</div>
+  </div>
+</div>`).join("")}
+</div>
+
+<div class="card" style="margin-top:18px;border-color:rgba(124,58,237,0.4)">
+  <div style="font-size:13px;color:#a78bfa;font-weight:600;margin-bottom:6px">WhatsApp Flows status</div>
+  <pre style="font-size:11px;color:rgba(255,255,255,0.6);font-family:monospace">${JSON.stringify(wflows, null, 2)}</pre>
+</div>
+</div></body></html>`);
   });
 
   // ===== COMPLIANCE (vencimentos) =====
@@ -1500,6 +1551,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/agenda-link", titulo: "Sincronizar celular", desc: "Conecta agenda HairTech ao Apple/Google Calendar do seu telefone", cor: "#06b6d4", icon: "📲" },
       { href: "/admin/dashboard", titulo: "Dashboard executivo", desc: "Graficos de leads, receita, agendamentos (Chart.js)", cor: "#8b5cf6", icon: "📈" },
       { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋" },
+      { href: "/admin/lgpd", titulo: "LGPD", desc: "Status de conformidade com Lei 13.709/2018 + DPO", cor: "#84cc16", icon: "🔒" },
       { href: "/admin/audit", titulo: "Audit IA", desc: "Log CFM 2.454/2026 de todas as chamadas de IA (retencao 5 anos)", cor: "#94a3b8", icon: "📝" },
       { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
       { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },
