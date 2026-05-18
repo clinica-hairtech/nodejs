@@ -623,7 +623,7 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       { ok: true, lbl: "Anonimizacao de PII antes da IA", det: "integrations/anonimizar.js - CPF/CNPJ/email/tel/nome trocados por tokens [NOME_1]" },
       { ok: true, lbl: "Direito de portabilidade (art. 18, V)", det: "GET /admin/paciente/:numero/exportar-lgpd retorna JSON completo" },
       { ok: true, lbl: "Direito de exclusao (art. 18, VI)", det: "POST /admin/paciente/:numero/excluir-lgpd anonimiza + deleta" },
-      { ok: false, lbl: "Log de acesso ao prontuario", det: "Tabela prontuario_access_log nao criada" },
+      { ok: true, lbl: "Log de acesso ao prontuario", det: "Tabela prontuario_access_log registra cada leitura (ts, wa_id, ip)" },
       { ok: false, lbl: "RIPD (Relatorio de Impacto)", det: "Pendente - modelo ANPD em docs/LGPD-CONFORMIDADE.md" },
       { ok: false, lbl: "Plano resposta a incidentes (notif ANPD 2d)", det: "Pendente - documentar processo" },
       { ok: false, lbl: "Cadeia de processadores documentada", det: "Meta, Google, OpenAI, Anthropic, Hostinger - listado em docs" },
@@ -1177,6 +1177,14 @@ ${navbar("", "prontuario")}
     const num = req.params.numero.replace(/\D/g,"");
     const c = conversas[num] || {};
     const p = lerProntuario(num);
+
+    // LGPD: log de acesso ao prontuario
+    if (db.pool) {
+      db.pool.query(
+        "INSERT INTO prontuario_access_log (wa_id, acessado_por, acao, ip) VALUES ($1, $2, $3, $4)",
+        [num, "doctor", "leitura", req.ip || ""]
+      ).catch(() => {});
+    }
     const historicoMsg = (c.historico || []).slice(-30).map(m => `<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:10px;margin-bottom:6px"><div style="font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:3px">${m.role}</div><div style="font-size:13px">${(m.content||"").substring(0,400)}</div></div>`).join("");
 
     const consultasHTML = (p.consultas || []).map(co => `<div class="card" style="margin-bottom:10px;padding:14px">
@@ -1203,9 +1211,10 @@ ${navbar("", "prontuario")}
       <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Conduta / Plano</h2>
       <textarea name="conduta" rows="4" style="margin-bottom:14px" placeholder="Protocolo, prescricao, retorno...">${p.conduta || ""}</textarea>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#a78bfa;flex:1;min-width:120px;justify-content:center">Salvar</button>
-        <a href="/admin/prontuario/${num}/laudo" target="_blank" class="btn" style="background:rgba(16,185,129,0.3);border-color:rgba(16,185,129,0.5);color:#34d399">Laudo PDF</a>
+        <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#a78bfa;flex:1;min-width:100px;justify-content:center">Salvar</button>
+        <a href="/admin/prontuario/${num}/laudo" target="_blank" class="btn" style="background:rgba(16,185,129,0.3);border-color:rgba(16,185,129,0.5);color:#34d399">Laudo</a>
         <a href="/admin/prontuario/${num}/prescrever" class="btn" style="background:rgba(59,130,246,0.3);border-color:rgba(59,130,246,0.5);color:#60a5fa">Prescrever</a>
+        <a href="/admin/prontuario/${num}/cobrar" class="btn" style="background:rgba(34,197,94,0.3);border-color:rgba(34,197,94,0.5);color:#86efac">Cobrar</a>
       </div>
     </form>
     <form method="POST" action="/admin/prontuario/${num}/consulta" class="card" style="padding:20px">
@@ -1401,6 +1410,88 @@ ${consultasHTML ? `<h2>Historico de consultas</h2>
 </div>
 
 </body></html>`);
+  });
+
+  // ===== COBRAR (gera link Pix InfinityPay + envia via WhatsApp) =====
+  router.get("/prontuario/:numero/cobrar", autenticar, (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    const c = conversas[num] || {};
+    const ip = (() => { try { return require("./integrations/infinitypay").status(); } catch (_) { return null; } })();
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Cobrar — ${c.nome || num}</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:780px;margin:0 auto;padding:32px 24px">
+${navbar("", "prontuario")}
+<a href="/admin/prontuario/${num}" style="color:rgba(255,255,255,0.5);text-decoration:none;font-size:13px">← Voltar pro prontuario</a>
+<h1 style="font-size:24px;margin:18px 0">Cobrar ${c.nome || num}</h1>
+<form method="POST" action="/admin/prontuario/${num}/cobrar" class="card" style="padding:24px">
+  <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:14px">Status InfinityPay: <strong style="color:${ip && ip.configured ? '#22c55e' : '#f59e0b'}">${ip && ip.configured ? "pronto" : "nao configurado"}</strong></div>
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Valor (R$)</label>
+  <input name="valor" type="number" step="0.01" min="0" placeholder="Ex: 400.00" required style="margin-bottom:14px"/>
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">CPF do paciente</label>
+  <input name="cpf" type="text" placeholder="00000000000" style="margin-bottom:14px"/>
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Descricao</label>
+  <input name="descricao" type="text" value="Atendimento Clinica HairTech" required style="margin-bottom:14px"/>
+  <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:18px">
+    <input type="checkbox" name="enviar_whatsapp" value="1" checked style="width:auto"/>
+    Enviar link automaticamente pelo WhatsApp do paciente
+  </label>
+  <button type="submit" class="btn" style="background:rgba(34,197,94,0.3);border-color:rgba(34,197,94,0.5);color:#86efac;width:100%;justify-content:center;padding:14px;font-size:15px">Gerar link Pix</button>
+</form>
+</div></body></html>`);
+  });
+
+  router.post("/prontuario/:numero/cobrar", autenticar, async (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    const c = conversas[num] || {};
+    const valor = parseFloat((req.body?.valor || "0").toString().replace(",", "."));
+    const cpf = (req.body?.cpf || "").toString().replace(/\D/g, "");
+    const descricao = (req.body?.descricao || "Atendimento Clinica HairTech").toString();
+    const enviarWa = req.body?.enviar_whatsapp === "1";
+
+    if (!valor || valor <= 0) return res.status(400).send("valor invalido");
+
+    let resultado = { ok: false };
+    try {
+      const ip = require("./integrations/infinitypay");
+      resultado = await ip.criarLinkPix({
+        valor, descricao,
+        telefone: num,
+        nomePaciente: c.nome || "Paciente",
+        cpfPaciente: cpf || "00000000000",
+        externalId: `cobranca-${num}-${Date.now()}`,
+      });
+
+      // Grava em pagamentos se DB tiver
+      if (resultado.ok && db.pool) {
+        await db.pool.query(
+          `INSERT INTO pagamentos (wa_id, provider, invoice_slug, valor, status, link_pagamento, metadata)
+           VALUES ($1, 'infinitepay', $2, $3, 'pendente', $4, $5)`,
+          [num, resultado.invoice_slug, valor, resultado.link_pagamento, { descricao, gerado_por: "doctor" }]
+        ).catch(() => {});
+      }
+
+      // Envia via WhatsApp se solicitado
+      if (resultado.ok && enviarWa && enviarMensagem) {
+        const msg = `Olá ${c.nome ? c.nome.split(" ")[0] : ""}!\n\nSegue link pra pagamento (${descricao}):\n\nValor: R$ ${valor.toFixed(2).replace(".", ",")}\n${resultado.link_pagamento}\n\nQualquer duvida, é so chamar.\n\nClinica HairTech`;
+        try {
+          await enviarMensagem(num, msg);
+          resultado.whatsapp_enviado = true;
+        } catch (e) { resultado.whatsapp_erro = e.message; }
+      }
+    } catch (e) {
+      resultado = { ok: false, error: e.message };
+    }
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Cobrar - resultado</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:780px;margin:0 auto;padding:32px 24px">
+${navbar("", "prontuario")}
+<h1 style="font-size:22px;margin-bottom:18px">Resultado da cobranca</h1>
+<div class="card" style="white-space:pre-wrap;font-family:monospace;font-size:12px;color:rgba(255,255,255,0.7)">${JSON.stringify(resultado, null, 2)}</div>
+<div style="margin-top:18px;display:flex;gap:8px">
+  <a class="btn" href="/admin/prontuario/${num}" style="background:rgba(255,255,255,0.1)">← prontuario</a>
+  ${resultado.link_pagamento ? `<a class="btn" href="${resultado.link_pagamento}" target="_blank" style="background:rgba(34,197,94,0.3);color:#86efac">Abrir link Pix</a>` : ""}
+</div>
+</div></body></html>`);
   });
 
   router.post("/prontuario/:numero/consulta", autenticar, (req, res) => {

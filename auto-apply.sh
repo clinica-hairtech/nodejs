@@ -103,6 +103,17 @@ BEGIN
   END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_pag_nsu ON pagamentos(transaction_nsu);
+-- LGPD: log de acesso ao prontuario (quem acessou o que e quando)
+CREATE TABLE IF NOT EXISTS prontuario_access_log (
+  id BIGSERIAL PRIMARY KEY,
+  wa_id TEXT NOT NULL,
+  acessado_em TIMESTAMPTZ DEFAULT NOW(),
+  acessado_por TEXT,
+  acao TEXT,
+  ip TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pal_wa ON prontuario_access_log(wa_id);
+CREATE INDEX IF NOT EXISTS idx_pal_ts ON prontuario_access_log(acessado_em);
 SQLEOF
 
 # T18: Marker ALLOW_RESTART.flag
