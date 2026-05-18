@@ -525,11 +525,28 @@ async function chamarIA(model, systemPrompt, historico, opts = {}) {
   return resp.data.choices[0].message.content;
 }
 
+const ollamaIA = (() => { try { return require("./integrations/ollama"); } catch (_) { return null; } })();
+
 async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
   const agente = opts.agente || "AV";
   let modelUsed = AI_MODEL;
   let resp;
+
+  // 1) Ollama local (custo zero) — se OLLAMA_ENABLED=1
+  if (ollamaIA && ollamaIA.ENABLED) {
+    try {
+      modelUsed = `ollama:${ollamaIA.MODEL}`;
+      resp = await ollamaIA.chamar(systemPrompt, historico, opts);
+      logAuditAI(agente, modelUsed, historico, resp, 0).catch(() => {});
+      return resp;
+    } catch (e) {
+      console.warn(`[AI] Ollama falhou: ${e.message} — caindo pro Gemini`);
+    }
+  }
+
+  // 2) Gemini
   try {
+    modelUsed = AI_MODEL;
     resp = await chamarIA(AI_MODEL, systemPrompt, historico, opts);
     logAuditAI(agente, modelUsed, historico, resp, 0).catch(() => {});
     return resp;
@@ -538,6 +555,8 @@ async function chamarIAComFallback(systemPrompt, historico, opts = {}) {
     console.warn(`[AI] ${AI_MODEL} falhou (status=${status} code=${e.code}): ${e.message}`);
     if (!OPENAI_API_KEY) { console.warn("[AI] OPENAI_API_KEY ausente no .env -- sem fallback"); throw e; }
   }
+
+  // 3) OpenAI
   try {
     modelUsed = "gpt-4o-mini";
     resp = await chamarIA(modelUsed, systemPrompt, historico, opts);

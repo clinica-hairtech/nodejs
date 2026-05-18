@@ -214,6 +214,26 @@ else
   echo "[T24]   nao running (state=$OC_RUNNING) - skip"
 fi
 
+# T27: IA local Ollama
+# Instala 1 vez se OLLAMA_ENABLED=1 no .env (ou se variavel especial flag presente).
+# Marker /opt/.ollama-installed evita reinstalar.
+WANT_OLLAMA=0
+[ -f /home/user/nodejs/.env ] && grep -q "^OLLAMA_ENABLED=1" /home/user/nodejs/.env && WANT_OLLAMA=1
+[ -f /home/user/nodejs/INSTALL_OLLAMA.flag ] && WANT_OLLAMA=1
+if [ "$WANT_OLLAMA" = "1" ]; then
+  if [ ! -f /opt/.ollama-installed ] && [ -f /home/user/nodejs/scripts/install-ollama.sh ]; then
+    echo "[T27] Ollama solicitado e nao instalado -> rodando installer"
+    chmod +x /home/user/nodejs/scripts/install-ollama.sh
+    bash /home/user/nodejs/scripts/install-ollama.sh 2>&1 | tail -4 | sed 's/^/[T27] /'
+  else
+    # Garante container running mesmo se installer ja rodou
+    if docker inspect ollama > /dev/null 2>&1; then
+      S=$(docker inspect ollama --format '{{.State.Status}}')
+      [ "$S" != "running" ] && docker start ollama > /dev/null 2>&1 && echo "[T27] ollama estava $S -> started"
+    fi
+  fi
+fi
+
 # T26: Se ALLOW_RESTART.flag existe E arquivos do AV mudaram, force-recreate.
 # Sem isso, commits em app.js/admin.js/db.js nao chegam no container rodando.
 if [ -f /home/user/nodejs/ALLOW_RESTART.flag ]; then
