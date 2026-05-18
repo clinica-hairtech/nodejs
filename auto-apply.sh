@@ -206,4 +206,33 @@ else
   echo "[T24]   nao running (state=$OC_RUNNING) - skip"
 fi
 
+# T25: Escreve status.json pra /admin/status ler.
+STATUS_FILE=/home/user/nodejs/status.json
+{
+  printf '{'
+  printf '"updated_at":"%s",' "$(date -Iseconds)"
+  printf '"source":"auto-apply",'
+  printf '"rev":"%s",' "$REV"
+  printf '"containers":{'
+  FIRST=1
+  for C in hairtech-postgres assistente-virtual whatsapp-ana hairtech-openclaw traefik-traefik-1 whatsapp-inbox; do
+    ST=$(docker inspect "$C" --format '{{.State.Status}}' 2>/dev/null || echo missing)
+    [ -z "$ST" ] && ST=missing
+    [ $FIRST -eq 0 ] && printf ','
+    printf '"%s":"%s"' "$C" "$ST"
+    FIRST=0
+  done
+  printf '},'
+  HEALTH=$(docker exec hairtech-openclaw curl -s -o /dev/null -w "%{http_code}" --max-time 4 http://localhost:18789/health 2>/dev/null)
+  HEALTH=${HEALTH:-0}
+  ANTH_READY=false; [ -f /opt/hairtech-openclaw/ANTHROPIC_READY.flag ] && ANTH_READY=true
+  ALLOW_RESTART=false; [ -f /home/user/nodejs/ALLOW_RESTART.flag ] && ALLOW_RESTART=true
+  AGENTS=$(ls /opt/hairtech-openclaw/agents 2>/dev/null | wc -l)
+  printf '"openclaw":{"anthropic_ready":%s,"agents_synced":%s,"health_http":%s},' "$ANTH_READY" "$AGENTS" "$HEALTH"
+  printf '"flags":{"ALLOW_RESTART":%s,"ANTHROPIC_READY":%s}' "$ALLOW_RESTART" "$ANTH_READY"
+  printf '}'
+} > "$STATUS_FILE.tmp" && mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+chmod 644 "$STATUS_FILE"
+echo "[T25] status.json escrito"
+
 echo "[$(date -Iseconds)] auto-apply.sh END (v10 Round 15)"

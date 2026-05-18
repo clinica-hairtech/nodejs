@@ -1,4 +1,6 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 const router = express.Router();
 const db = require("./db");
 
@@ -67,6 +69,7 @@ function navbar(senha, ativa) {
   const links = [
     { href: `/admin?senha=${senha}`, label: "Dashboard", id: "dash" },
     { href: `/admin/kanban?senha=${senha}`, label: "Pipeline", id: "kanban" },
+    { href: `/admin/status?senha=${senha}`, label: "Status", id: "status" },
     { href: `/admin/exportar?senha=${senha}`, label: "↓ CSV", id: "csv" },
   ];
   return `
@@ -464,6 +467,87 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       } catch (e) { console.error("Erro ao enviar do painel:", e.message); }
     }
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
+  });
+
+  // ===== STATUS (infra + OpenClaw) =====
+  router.get("/status", autenticar, (req, res) => {
+    const senha = req.query.senha;
+    let s = {};
+    try {
+      const raw = fs.readFileSync(path.join(__dirname, "status.json"), "utf8");
+      s = JSON.parse(raw);
+    } catch (_) {
+      s = { error: "status.json ainda nao gerado - aguarde 1 ciclo de cron (2min)" };
+    }
+
+    const containers = s.containers || {};
+    const oc = s.openclaw || {};
+    const flags = s.flags || {};
+    const updated = s.updated_at ? new Date(s.updated_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—";
+
+    const containerRow = (name) => {
+      const st = containers[name] || "missing";
+      const color = st === "running" ? "#34c759" : st === "missing" ? "#8e8e93" : "#ff3b30";
+      return `<tr class="row"><td style="padding:14px 16px;font-family:monospace">${name}</td><td style="padding:14px 16px;text-align:right"><span class="tag" style="background:${color}33;border-color:${color}66;color:${color}">${st}</span></td></tr>`;
+    };
+
+    const flagRow = (name, val) => {
+      const color = val ? "#34c759" : "#8e8e93";
+      const label = val ? "ativo" : "ausente";
+      return `<tr class="row"><td style="padding:14px 16px;font-family:monospace">${name}</td><td style="padding:14px 16px;text-align:right"><span class="tag" style="background:${color}33;border-color:${color}66;color:${color}">${label}</span></td></tr>`;
+    };
+
+    const ocColor = oc.health_http === 200 ? "#34c759" : oc.anthropic_ready ? "#ff9f0a" : "#8e8e93";
+    const ocLabel = oc.health_http === 200 ? "saudavel" : oc.anthropic_ready ? "armado, sem health" : "nao armado";
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Status — HairTech</title>
+<style>${CSS_BASE}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}</style>
+</head><body><div style="max-width:1280px;margin:0 auto;padding:32px 24px">
+${navbar(senha, "status")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <h1 style="font-size:24px;font-weight:700">Status do sistema</h1>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4)">Atualizado: ${updated} ${s.source ? '· fonte: '+s.source : ''} ${s.rev ? '· rev '+s.rev : ''}</div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px">OpenClaw</h2>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${ocColor};box-shadow:0 0 10px ${ocColor}"></span>
+      <span style="font-size:18px;font-weight:600">${ocLabel}</span>
+    </div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.9">
+      Anthropic provider: <strong>${oc.anthropic_ready ? 'mergeado' : 'pendente'}</strong><br/>
+      Agentes sincronizados: <strong>${oc.agents_synced ?? '—'} / 13</strong><br/>
+      Health HTTP: <strong>${oc.health_http ?? '—'}</strong>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px">Containers</h2>
+    <table>
+      ${["hairtech-postgres","assistente-virtual","whatsapp-ana","hairtech-openclaw","traefik-traefik-1","whatsapp-inbox"].map(containerRow).join("")}
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px">Marker flags</h2>
+    <table>
+      ${flagRow("ALLOW_RESTART.flag", flags.ALLOW_RESTART)}
+      ${flagRow("ANTHROPIC_READY.flag", flags.ANTHROPIC_READY)}
+    </table>
+  </div>
+
+  <div class="card" style="grid-column:1/-1">
+    <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px">Ultimas tentativas de self-heal</h2>
+    <div style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.8;font-family:monospace;white-space:pre-wrap">${(s.last_alerts || []).slice(-5).join("\n") || "nenhum alerta recente"}</div>
+  </div>
+</div>
+
+${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,10,0.4)"><strong style="color:#ff9f0a">${s.error}</strong></div>` : ""}
+</div></body></html>`);
   });
 
   // ===== EXPORTAR CSV =====
