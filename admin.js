@@ -141,6 +141,7 @@ function navbar(senha, ativa) {
     { href: `/admin/aprovar-fila${q}`, label: "Fila", id: "aprovar-fila" },
     { href: `/admin/agendamentos${q}`, label: "Agenda", id: "agendamentos" },
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
+    { href: `/admin/compliance${q}`, label: "Compliance", id: "compliance" },
     { href: `/admin/audit${q}`, label: "Audit", id: "audit" },
     { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
@@ -539,6 +540,60 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       } catch (e) { console.error("Erro ao enviar do painel:", e.message); }
     }
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
+  });
+
+  // ===== COMPLIANCE (vencimentos) =====
+  const VENC_FILE = path.join(__dirname, "data", "vencimentos.json");
+  function lerVenc() {
+    try { return JSON.parse(fs.readFileSync(VENC_FILE, "utf8")); }
+    catch (_) { return []; }
+  }
+  function salvarVenc(lista) {
+    fs.mkdirSync(path.dirname(VENC_FILE), { recursive: true });
+    fs.writeFileSync(VENC_FILE, JSON.stringify(lista, null, 2));
+  }
+
+  router.get("/compliance", autenticar, (req, res) => {
+    const lista = lerVenc();
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const itens = lista.map(v => {
+      const dias = v.vence_em ? Math.floor((new Date(v.vence_em) - hoje) / 86400000) : null;
+      let cor = "#8e8e93";
+      if (dias !== null) {
+        if (dias < 0) cor = "#ef4444";
+        else if (dias <= 7) cor = "#f59e0b";
+        else if (dias <= 30) cor = "#facc15";
+        else if (dias <= 60) cor = "#3b82f6";
+        else cor = "#22c55e";
+      }
+      return `<div class="card" style="margin-bottom:10px;padding:16px;border-left:3px solid ${cor}">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px">
+              ${v.titulo}
+              ${v.ativo ? "" : '<span class="tag" style="font-size:10px">inativo</span>'}
+            </div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:3px">${v.descricao}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:6px">categoria: ${v.categoria || "—"}${v.notas ? ' · '+v.notas : ''}</div>
+          </div>
+          <div style="text-align:right;min-width:140px">
+            <div style="font-size:18px;font-weight:600;color:${cor}">${v.vence_em ? v.vence_em : "—"}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.5)">${dias === null ? "" : (dias < 0 ? "vencido " + (-dias) + "d" : dias === 0 ? "vence hoje" : "em " + dias + "d")}</div>
+            ${v.renovacao_link ? `<a class="btn" href="${v.renovacao_link}" target="_blank" style="margin-top:8px;background:rgba(59,130,246,0.2);color:#60a5fa;font-size:11px;padding:6px 10px">Renovar</a>` : ""}
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Compliance — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:1080px;margin:0 auto;padding:32px 24px">
+${navbar("", "compliance")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Compliance e vencimentos</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">Alerta semanal Telegram para itens com &lt;60 dias.</div>
+${itens || '<div class="card" style="padding:40px;text-align:center;color:rgba(255,255,255,0.4)">Sem vencimentos cadastrados</div>'}
+<div style="margin-top:20px;font-size:12px;color:rgba(255,255,255,0.4)">Editar em <code>data/vencimentos.json</code></div>
+</div></body></html>`);
   });
 
   // ===== AUDIT IA (CFM 2.454/2026 - log de 5 anos) =====
@@ -1444,6 +1499,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/agendamentos", titulo: "Agenda", desc: "Consultas e procedimentos dos proximos 60 dias", cor: "#3b82f6", icon: "📅" },
       { href: "/admin/agenda-link", titulo: "Sincronizar celular", desc: "Conecta agenda HairTech ao Apple/Google Calendar do seu telefone", cor: "#06b6d4", icon: "📲" },
       { href: "/admin/dashboard", titulo: "Dashboard executivo", desc: "Graficos de leads, receita, agendamentos (Chart.js)", cor: "#8b5cf6", icon: "📈" },
+      { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋" },
       { href: "/admin/audit", titulo: "Audit IA", desc: "Log CFM 2.454/2026 de todas as chamadas de IA (retencao 5 anos)", cor: "#94a3b8", icon: "📝" },
       { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
       { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },

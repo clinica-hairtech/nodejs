@@ -1,0 +1,68 @@
+[
+  {
+    "id": "vps-hostinger",
+    "titulo": "Renovacao VPS Hostinger",
+    "descricao": "KVM 4 da clinica. Sem renovacao, todos os servicos caem.",
+    "vence_em": "2026-05-22",
+    "renovacao_link": "https://hpanel.hostinger.com/billing/subscriptions",
+    "categoria": "infra",
+    "ativo": true
+  },
+  {
+    "id": "alvara-sanitario",
+    "titulo": "Alvara sanitario municipal",
+    "descricao": "Vigilancia sanitaria municipal. Confirmar data exata com responsavel.",
+    "vence_em": "2027-03-31",
+    "renovacao_link": null,
+    "categoria": "regulatorio",
+    "ativo": true
+  },
+  {
+    "id": "certificado-cfm",
+    "titulo": "Certificado A3 nuvem CFM",
+    "descricao": "Certificado digital ICP-Brasil gratuito via CRM Virtual. Validade 1 ano.",
+    "vence_em": null,
+    "renovacao_link": "https://crmvirtual.cfm.org.br",
+    "categoria": "documento",
+    "ativo": false,
+    "notas": "Ativar quando Dr. obtiver o certificado pela primeira vez"
+  },
+  {
+    "id": "anuidade-cremerj",
+    "titulo": "Anuidade CREMERJ",
+    "descricao": "Conselho Regional de Medicina RJ.",
+    "vence_em": "2027-03-31",
+    "renovacao_link": "https://portal.cremerj.org.br",
+    "categoria": "regulatorio",
+    "ativo": true
+  },
+  {
+    "id": "responsavel-tecnico",
+    "titulo": "Termo de Responsabilidade Tecnica",
+    "descricao": "Renovacao anual junto a Vigilancia Sanitaria.",
+    "vence_em": null,
+    "renovacao_link": null,
+    "categoria": "regulatorio",
+    "ativo": false,
+    "notas": "Confirmar data com responsavel tecnico"
+  },
+  {
+    "id": "ssl-hairtech",
+    "titulo": "Certificado SSL hairtech.org",
+    "descricao": "Let's Encrypt via Traefik. Renovacao automatica a cada 60 dias.",
+    "vence_em": null,
+    "renovacao_link": null,
+    "categoria": "infra",
+    "ativo": false,
+    "notas": "Monitorado pelo Traefik, alertar so se falhar"
+  },
+  {
+    "id": "dominio-hairtech",
+    "titulo": "Dominio hairtech.org",
+    "descricao": "Renovacao anual do dominio.",
+    "vence_em": "2027-02-15",
+    "renovacao_link": "https://hpanel.hostinger.com/domains",
+    "categoria": "infra",
+    "ativo": true
+  }
+]
