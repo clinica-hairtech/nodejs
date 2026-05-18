@@ -137,6 +137,7 @@ function navbar(senha, ativa) {
     { href: `/admin/agentes${q}`, label: "Agentes", id: "agentes" },
     { href: `/admin/status${q}`, label: "Status", id: "status" },
     { href: `/admin/handoff${q}`, label: "Handoff", id: "handoff" },
+    { href: `/admin/aprovar-fila${q}`, label: "Fila", id: "aprovar-fila" },
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
     { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
@@ -535,6 +536,91 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       } catch (e) { console.error("Erro ao enviar do painel:", e.message); }
     }
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
+  });
+
+  // ===== APROVAR-FILA (re-engajamento pro-ativo) =====
+  const CRM_FILA_FILE = path.join(__dirname, "crm-fila.json");
+
+  function lerFila() {
+    try { const f = JSON.parse(fs.readFileSync(CRM_FILA_FILE, "utf8")); return Array.isArray(f) ? f : []; }
+    catch (_) { return []; }
+  }
+  function salvarFila(f) { fs.writeFileSync(CRM_FILA_FILE, JSON.stringify(f, null, 2)); }
+
+  router.get("/aprovar-fila", autenticar, (req, res) => {
+    const fila = lerFila();
+    const pendentes = fila.filter(p => p.status === "pendente");
+
+    const cards = pendentes.length === 0
+      ? `<div style="padding:60px 20px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum lead aguardando re-engajamento.<br/><span style="font-size:12px">O CRM pro-ativo roda 1x/dia (10h) e popula esta fila.</span></div>`
+      : pendentes.map(p => {
+          const dias = p.ultima_atividade ? Math.floor((Date.now() - Number(p.ultima_atividade)) / 86400000) : "?";
+          const corTemp = p.temperatura === "quente" ? "#ff3b30" : "#ff9f0a";
+          return `<div class="card" style="margin-bottom:14px;padding:18px">
+            <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+              <div>
+                <div style="font-weight:600;font-size:16px">${p.nome}</div>
+                <div style="font-size:12px;color:rgba(255,255,255,0.5);font-family:monospace">${p.numero} · ${dias} dias inativo</div>
+              </div>
+              <span class="tag" style="background:${corTemp}33;border-color:${corTemp}66;color:${corTemp}">${p.temperatura}</span>
+            </div>
+            <form method="POST" action="/admin/aprovar-fila/${p.id}/aprovar">
+              <textarea name="mensagem" rows="3" style="margin-bottom:10px;font-size:13px">${(p.mensagem_sugerida||"").replace(/</g,"&lt;")}</textarea>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button type="submit" class="btn" style="background:rgba(34,197,94,0.25);border-color:rgba(34,197,94,0.5);color:#86efac;flex:1;justify-content:center">✓ Aprovar e enviar</button>
+                <button type="submit" formaction="/admin/aprovar-fila/${p.id}/rejeitar" class="btn" style="background:rgba(239,68,68,0.2);border-color:rgba(239,68,68,0.5);color:#fca5a5">✗ Rejeitar</button>
+              </div>
+            </form>
+          </div>`;
+        }).join("");
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Aprovar fila — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+${navbar("", "aprovar-fila")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+  <h1 style="font-size:24px;font-weight:700">Re-engajamento pro-ativo (${pendentes.length})</h1>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4)">Mensagem editavel antes de enviar</div>
+</div>
+${cards}
+</div></body></html>`);
+  });
+
+  router.post("/aprovar-fila/:id/aprovar", autenticar, async (req, res) => {
+    const fila = lerFila();
+    const item = fila.find(p => p.id === req.params.id && p.status === "pendente");
+    if (!item) return res.redirect("/admin/aprovar-fila");
+    const msg = (req.body?.mensagem || item.mensagem_sugerida || "").toString().trim();
+    if (!msg) return res.redirect("/admin/aprovar-fila");
+
+    let enviado = false;
+    if (enviarMensagem) {
+      try { await enviarMensagem(item.numero, msg); enviado = true; }
+      catch (e) { console.error("[aprovar-fila] envio falhou:", e.message); }
+    }
+
+    item.status = enviado ? "enviado" : "falha_envio";
+    item.mensagem_final = msg;
+    item.enviado_em = new Date().toISOString();
+    item.aprovado_por = "doctor";
+    salvarFila(fila);
+
+    if (enviado && conversas[item.numero]) {
+      conversas[item.numero].historico = conversas[item.numero].historico || [];
+      conversas[item.numero].historico.push({ role: "assistant", content: msg, ts: Date.now(), origem: "proactive-crm" });
+      conversas[item.numero].ultimaAtividade = Date.now();
+      db.salvarConversa(item.numero, conversas[item.numero]).catch(() => {});
+      db.salvarMensagem(item.numero, "assistant", msg).catch(() => {});
+    }
+    res.redirect("/admin/aprovar-fila");
+  });
+
+  router.post("/aprovar-fila/:id/rejeitar", autenticar, (req, res) => {
+    const fila = lerFila();
+    const item = fila.find(p => p.id === req.params.id);
+    if (item) { item.status = "rejeitado"; item.rejeitado_em = new Date().toISOString(); salvarFila(fila); }
+    res.redirect("/admin/aprovar-fila");
   });
 
   // ===== PRONTUARIO (auxiliar, NAO substitui certificado SBIS) =====
@@ -946,6 +1032,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/agentes", titulo: "Agentes", desc: "13 agentes OpenClaw com invoke de teste", cor: "#0ea5e9", icon: "🤖" },
       { href: "/admin/status", titulo: "Status", desc: "Saude dos containers, OpenClaw, flags", cor: "#10b981", icon: "💚" },
       { href: "/admin/handoff", titulo: "Handoff", desc: "Pedidos pendentes de acao humana (CAPTCHA, login)", cor: "#f59e0b", icon: "🖐" },
+      { href: "/admin/aprovar-fila", titulo: "Fila de aprovacao", desc: "Re-engajamento pro-ativo de leads inativos (revisar antes de enviar)", cor: "#22c55e", icon: "✉" },
       { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
       { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },
     ];

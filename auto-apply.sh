@@ -257,6 +257,26 @@ if [ -f /home/user/nodejs/ALLOW_RESTART.flag ]; then
   fi
 fi
 
+# T28: Cron de agentes pro-ativos.
+# Roda scripts/proactive-crm.js diariamente 10h (BRT = 13h UTC).
+# Executa DENTRO do container AV via docker exec (heranca de ENV + acesso DB).
+PROACTIVE_CRON=/etc/cron.d/hairtech-proactive
+if [ ! -f "$PROACTIVE_CRON" ] || ! grep -q "proactive-crm" "$PROACTIVE_CRON" 2>/dev/null; then
+  cat > "$PROACTIVE_CRON" <<'PROCEOF'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# CRM pro-ativo: 13h UTC = 10h BRT
+0 13 * * * root docker exec assistente-virtual node /usr/src/app/scripts/proactive-crm.js >> /var/log/hairtech-proactive.log 2>&1
+PROCEOF
+  chmod 644 "$PROACTIVE_CRON"
+  systemctl restart cron 2>/dev/null
+  echo "[T28] cron pro-ativo instalado"
+else
+  echo "[T28] cron pro-ativo ja existe"
+fi
+touch /var/log/hairtech-proactive.log
+chmod 640 /var/log/hairtech-proactive.log
+
 # T25: Escreve status.json pra /admin/status ler.
 STATUS_FILE=/home/user/nodejs/status.json
 {
