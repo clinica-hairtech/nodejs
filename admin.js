@@ -140,6 +140,7 @@ function navbar(senha, ativa) {
     { href: `/admin/handoff${q}`, label: "Handoff", id: "handoff" },
     { href: `/admin/aprovar-fila${q}`, label: "Fila", id: "aprovar-fila" },
     { href: `/admin/templates${q}`, label: "Templates", id: "templates" },
+    { href: `/admin/broadcast${q}`, label: "Broadcast", id: "broadcast" },
     { href: `/admin/agendamentos${q}`, label: "Agenda", id: "agendamentos" },
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
     { href: `/admin/compliance${q}`, label: "Compliance", id: "compliance" },
@@ -1020,6 +1021,114 @@ ${navbar("", "dashboard")}
   });
 </script>
 </div></body></html>`);
+  });
+
+  // ===== BROADCAST (mensagem em massa segmentada) =====
+  function segmentosDisponiveis() {
+    const todas = Object.entries(conversas);
+    return {
+      ativos: todas.filter(([_,c]) => c.status === "ativo").map(([n]) => n),
+      quentes: todas.filter(([_,c]) => c.status === "ativo" && c.temperatura === "quente").map(([n]) => n),
+      mornos: todas.filter(([_,c]) => c.status === "ativo" && c.temperatura === "morno").map(([n]) => n),
+      frios: todas.filter(([_,c]) => c.status === "ativo" && c.temperatura === "frio").map(([n]) => n),
+      sem_resposta_7d: todas.filter(([_,c]) => {
+        const h = c.historico || [];
+        const inativo = c.ultimaAtividade && (Date.now() - c.ultimaAtividade) > 7*86400000;
+        const aguardando = h.length > 0 && h[h.length-1].role === "assistant";
+        return c.status === "ativo" && inativo && aguardando;
+      }).map(([n]) => n),
+    };
+  }
+
+  router.get("/broadcast", autenticar, (req, res) => {
+    const segs = segmentosDisponiveis();
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Broadcast — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:780px;margin:0 auto;padding:32px 24px">
+${navbar("", "broadcast")}
+<h1 style="font-size:24px;margin-bottom:6px">Broadcast segmentado</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">Enviar uma mensagem pra um grupo de leads. Delay 3s entre envios pra nao bater rate limit. So envia pra status='ativo' (preserva LGPD).</div>
+
+<form method="POST" action="/admin/broadcast" class="card" style="padding:24px">
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Segmento</label>
+  <select name="segmento" required style="margin-bottom:14px">
+    <option value="quentes">Leads quentes ativos (${segs.quentes.length})</option>
+    <option value="mornos">Leads mornos ativos (${segs.mornos.length})</option>
+    <option value="frios">Leads frios ativos (${segs.frios.length})</option>
+    <option value="sem_resposta_7d">Sem resposta ha 7+ dias (${segs.sem_resposta_7d.length})</option>
+    <option value="ativos">TODOS ativos (${segs.ativos.length})</option>
+  </select>
+
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Mensagem</label>
+  <textarea name="mensagem" rows="6" required placeholder="Olá! Estamos com uma novidade..." style="margin-bottom:14px"></textarea>
+
+  <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:10px">
+    <input type="checkbox" name="incluir_optout" value="1" checked style="width:auto"/>
+    Incluir aviso de descadastro no final (LGPD/recomendado)
+  </label>
+
+  <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:18px">
+    <input type="checkbox" name="confirmar" value="sim" required style="width:auto"/>
+    Confirmo que revisei a mensagem e quero disparar agora
+  </label>
+
+  <button type="submit" class="btn" style="background:rgba(239,68,68,0.3);border-color:rgba(239,68,68,0.5);color:#fca5a5;width:100%;justify-content:center;padding:14px;font-size:15px">▶ Disparar broadcast</button>
+</form>
+</div></body></html>`);
+  });
+
+  router.post("/broadcast", autenticar, async (req, res) => {
+    const segs = segmentosDisponiveis();
+    const seg = (req.body?.segmento || "").toString();
+    const msgOriginal = (req.body?.mensagem || "").toString().trim();
+    const incluirOptout = req.body?.incluir_optout === "1";
+    if (!msgOriginal || !segs[seg]) return res.status(400).send("dados invalidos");
+    const numeros = segs[seg];
+
+    let msgFinal = msgOriginal;
+    if (incluirOptout) {
+      msgFinal += "\n\n_Se nao quiser mais receber mensagens, responda PARAR._";
+    }
+
+    // Dispara em background com delay e responde imediato
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Broadcast iniciado</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:780px;margin:0 auto;padding:32px 24px">
+${navbar("", "broadcast")}
+<h1 style="font-size:22px;margin-bottom:10px">Broadcast iniciado</h1>
+<div class="card" style="padding:20px">
+  <div style="font-size:14px;margin-bottom:10px">Disparando pra ${numeros.length} destinatario(s) com delay 3s entre envios.</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.5)">Voce recebe Telegram quando terminar (${Math.round(numeros.length * 3 / 60)} min estimado).</div>
+</div>
+<a class="btn" href="/admin/portal" style="margin-top:18px;background:rgba(255,255,255,0.1)">← portal</a>
+</div></body></html>`);
+
+    // Background dispatch (não aguarda)
+    (async () => {
+      let ok = 0, erro = 0;
+      const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+      const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+      const axiosLib = require("axios");
+      const inicio = Date.now();
+      for (const num of numeros) {
+        try {
+          if (enviarMensagem) {
+            await enviarMensagem(num, msgFinal);
+            ok++;
+            if (conversas[num]) {
+              conversas[num].historico = conversas[num].historico || [];
+              conversas[num].historico.push({ role: "assistant", content: msgFinal, ts: Date.now(), origem: "broadcast" });
+              conversas[num].ultimaAtividade = Date.now();
+              db.salvarConversa(num, conversas[num]).catch(()=>{});
+              db.salvarMensagem(num, "assistant", msgFinal).catch(()=>{});
+            }
+          }
+        } catch (e) { erro++; console.error("[broadcast] falha", num, e.message); }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      const min = Math.round((Date.now() - inicio) / 60000);
+      const resumo = `HairTech broadcast finalizado.\nSegmento: ${seg}\nEnviadas: ${ok}\nFalhas: ${erro}\nDuracao: ${min}min`;
+      axiosLib.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, { chat_id: tgChat, text: resumo }, { timeout: 5000 }).catch(()=>{});
+    })();
   });
 
   // ===== TEMPLATES de mensagem =====
@@ -1939,6 +2048,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/agenda-link", titulo: "Sincronizar celular", desc: "Conecta agenda HairTech ao Apple/Google Calendar do seu telefone", cor: "#06b6d4", icon: "📲" },
       { href: "/admin/dashboard", titulo: "Dashboard executivo", desc: "Graficos de leads, receita, agendamentos (Chart.js)", cor: "#8b5cf6", icon: "📈" },
       { href: "/admin/templates", titulo: "Templates", desc: "Mensagens prontas pra copiar e colar (12 templates pre-configurados)", cor: "#f97316", icon: "✂" },
+      { href: "/admin/broadcast", titulo: "Broadcast", desc: "Mensagem em massa segmentada (quentes/mornos/inativos/todos)", cor: "#e11d48", icon: "📢" },
       { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋", badge: contadores.vencimentos },
       { href: "/admin/lgpd", titulo: "LGPD", desc: "Status de conformidade com Lei 13.709/2018 + DPO", cor: "#84cc16", icon: "🔒" },
       { href: "/admin/incidentes", titulo: "Incidentes", desc: "Registro de incidentes LGPD com notificacao ANPD", cor: "#dc2626", icon: "🚨", badge: contadores.incidentes },
