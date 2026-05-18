@@ -230,6 +230,12 @@ if [ "$WANT_OLLAMA" = "1" ]; then
     if docker inspect ollama > /dev/null 2>&1; then
       S=$(docker inspect ollama --format '{{.State.Status}}')
       [ "$S" != "running" ] && docker start ollama > /dev/null 2>&1 && echo "[T27] ollama estava $S -> started"
+      # Verifica se modelo do .env esta presente; se nao, pull (upgrade pos KVM upgrade)
+      WANT_MODEL=$(grep "^OLLAMA_MODEL=" /home/user/nodejs/.env 2>/dev/null | cut -d= -f2-)
+      if [ -n "$WANT_MODEL" ] && ! docker exec ollama ollama list 2>/dev/null | grep -q "$WANT_MODEL"; then
+        echo "[T27] modelo $WANT_MODEL nao presente -> pull em background"
+        docker exec -d ollama ollama pull "$WANT_MODEL" 2>/dev/null
+      fi
     fi
   fi
 fi

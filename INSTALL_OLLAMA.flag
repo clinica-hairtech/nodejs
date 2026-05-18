@@ -1,4 +1,5 @@
 solicitado em 2026-05-18 por Dr. Ricardo via Claude Code Web
-modelo padrao: qwen2.5:3b-instruct
+VPS upgrade: KVM 4 (16GB RAM)
+modelo padrao: qwen2.5:7b-instruct (escolha automatica pelo installer)
 fallback chain: ollama -> gemini -> openai
-auto-installer: scripts/install-ollama.sh (chamado por T27 do auto-apply.sh)
+auto-installer: scripts/install-ollama.sh

@@ -12,16 +12,29 @@ echo "============================================================"
 echo "[$TS] install-ollama.sh START"
 echo "============================================================"
 
-# 1) Verifica RAM livre (precisa >=3GB livre para baixar e rodar modelo)
+# 1) Verifica RAM livre (qwen2.5:7b precisa ~7-8GB inference -> exige >=6GB livre)
 FREE_MB=$(free -m | awk '/^Mem:/ {print $7}')
-echo "[install] RAM disponivel: ${FREE_MB} MB"
-if [ -z "$FREE_MB" ] || [ "$FREE_MB" -lt 3000 ]; then
-  echo "[install] ABORTAR: RAM livre < 3000 MB. Considere upgrade do VPS."
+TOTAL_MB=$(free -m | awk '/^Mem:/ {print $2}')
+echo "[install] RAM total: ${TOTAL_MB} MB, disponivel: ${FREE_MB} MB"
+
+# Modelo padrao: 7B em VPS com >=8GB total, senao 3B
+if [ -n "$TOTAL_MB" ] && [ "$TOTAL_MB" -ge 12000 ]; then
+  DEFAULT_MODEL="qwen2.5:7b-instruct"
+  MIN_FREE=6000
+else
+  DEFAULT_MODEL="qwen2.5:3b-instruct"
+  MIN_FREE=3000
+fi
+MODEL="${OLLAMA_MODEL:-$DEFAULT_MODEL}"
+echo "[install] modelo escolhido: $MODEL (min livre exigido: ${MIN_FREE}MB)"
+
+if [ -z "$FREE_MB" ] || [ "$FREE_MB" -lt "$MIN_FREE" ]; then
+  echo "[install] ABORTAR: RAM livre < ${MIN_FREE} MB."
   TG_TOKEN="${TELEGRAM_BOT_TOKEN:-8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ}"
   TG_CHAT="${TELEGRAM_CHAT_ID:-8713631351}"
   curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
     --data-urlencode "chat_id=${TG_CHAT}" \
-    --data-urlencode "text=HairTech: Ollama install abortado - RAM livre ${FREE_MB}MB (min 3000). Upgrade VPS para KVM 4 (16GB) ou liberar memoria." \
+    --data-urlencode "text=HairTech: Ollama install abortado - RAM livre ${FREE_MB}MB (min ${MIN_FREE}). Aguarde liberar memoria ou suba VPS." \
     > /dev/null 2>&1
   exit 2
 fi
@@ -48,12 +61,12 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 3
 done
 
-# 5) Baixa modelo se faltar (qwen2.5:3b-instruct ~1.9GB)
-MODEL="${OLLAMA_MODEL:-qwen2.5:3b-instruct}"
+# 5) Baixa modelo se faltar
 if docker exec ollama ollama list 2>/dev/null | grep -q "$MODEL"; then
   echo "[install] modelo $MODEL ja presente"
 else
-  echo "[install] baixando modelo $MODEL (1.9GB)..."
+  SIZE=$([ "$MODEL" = "qwen2.5:7b-instruct" ] && echo "4.7GB" || echo "1.9GB")
+  echo "[install] baixando modelo $MODEL ($SIZE)..."
   docker exec ollama ollama pull "$MODEL" 2>&1 | tail -3 | sed 's/^/[install] /'
 fi
 

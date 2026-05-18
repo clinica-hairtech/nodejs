@@ -11,13 +11,13 @@ services:
       - ollama-data:/root/.ollama
     environment:
       - OLLAMA_HOST=0.0.0.0
-      - OLLAMA_KEEP_ALIVE=10m
+      - OLLAMA_KEEP_ALIVE=30m
       - OLLAMA_NUM_PARALLEL=2
-      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_MAX_LOADED_MODELS=2
     deploy:
       resources:
         limits:
-          memory: 5g
+          memory: 10g
     healthcheck:
       test: ["CMD-SHELL", "ollama list > /dev/null 2>&1 || exit 1"]
       interval: 30s
