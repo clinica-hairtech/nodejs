@@ -132,7 +132,8 @@ function navbar(senha, ativa) {
   const q = senha ? `?senha=${senha}` : "";
   const links = [
     { href: `/admin/portal`, label: "Portal", id: "portal" },
-    { href: `/admin${q}`, label: "Dashboard", id: "dash" },
+    { href: `/admin${q}`, label: "Conversas", id: "dash" },
+    { href: `/admin/dashboard${q}`, label: "Dashboard", id: "dashboard" },
     { href: `/admin/kanban${q}`, label: "Pipeline", id: "kanban" },
     { href: `/admin/agentes${q}`, label: "Agentes", id: "agentes" },
     { href: `/admin/status${q}`, label: "Status", id: "status" },
@@ -140,6 +141,7 @@ function navbar(senha, ativa) {
     { href: `/admin/aprovar-fila${q}`, label: "Fila", id: "aprovar-fila" },
     { href: `/admin/agendamentos${q}`, label: "Agenda", id: "agendamentos" },
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
+    { href: `/admin/audit${q}`, label: "Audit", id: "audit" },
     { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
   return `
@@ -537,6 +539,260 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       } catch (e) { console.error("Erro ao enviar do painel:", e.message); }
     }
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
+  });
+
+  // ===== AUDIT IA (CFM 2.454/2026 - log de 5 anos) =====
+  router.get("/audit", autenticar, async (req, res) => {
+    const dias = Math.min(parseInt(req.query.dias || "7", 10), 90);
+    const exportar = req.query.export === "csv";
+    let rows = [];
+    let stats = { total: 0, por_modelo: [], por_agente: [] };
+    let erro = null;
+
+    try {
+      if (db.pool) {
+        const r1 = await db.pool.query(`
+          SELECT id, ts, agente, modelo, tokens_in, tokens_out, prompt_hash, response_hash
+          FROM audit_ai_calls
+          WHERE ts > NOW() - ($1 || ' days')::interval
+          ORDER BY ts DESC
+          LIMIT 500
+        `, [String(dias)]);
+        rows = r1.rows;
+        const r2 = await db.pool.query(`
+          SELECT modelo, COUNT(*)::int AS qtd, COALESCE(SUM(tokens_in+tokens_out),0)::bigint AS tokens
+          FROM audit_ai_calls WHERE ts > NOW() - ($1 || ' days')::interval GROUP BY modelo ORDER BY qtd DESC
+        `, [String(dias)]);
+        stats.por_modelo = r2.rows;
+        const r3 = await db.pool.query(`
+          SELECT agente, COUNT(*)::int AS qtd FROM audit_ai_calls
+          WHERE ts > NOW() - ($1 || ' days')::interval GROUP BY agente ORDER BY qtd DESC
+        `, [String(dias)]);
+        stats.por_agente = r3.rows;
+        stats.total = rows.length;
+      }
+    } catch (e) { erro = e.message; }
+
+    if (exportar) {
+      const csv = ["id,ts,agente,modelo,tokens_in,tokens_out,prompt_hash,response_hash",
+        ...rows.map(r => `${r.id},${r.ts?.toISOString?.()||r.ts},"${r.agente||""}","${r.modelo||""}",${r.tokens_in||0},${r.tokens_out||0},${r.prompt_hash||""},${r.response_hash||""}`)
+      ].join("\n");
+      res.setHeader("Content-Type", "text/csv;charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename=audit-ia-${dias}d.csv`);
+      return res.send("﻿" + csv);
+    }
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Audit IA — HairTech</title><style>${CSS_BASE}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}</style></head>
+<body><div style="max-width:1280px;margin:0 auto;padding:32px 24px">
+${navbar("", "audit")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+  <h1 style="font-size:24px;font-weight:700">Auditoria de chamadas IA</h1>
+  <div style="display:flex;gap:8px">
+    <a href="/admin/audit?dias=7" class="btn" style="background:rgba(255,255,255,0.06)">7d</a>
+    <a href="/admin/audit?dias=30" class="btn" style="background:rgba(255,255,255,0.06)">30d</a>
+    <a href="/admin/audit?dias=90" class="btn" style="background:rgba(255,255,255,0.06)">90d</a>
+    <a href="/admin/audit?dias=${dias}&export=csv" class="btn" style="background:rgba(34,197,94,0.2);color:#86efac">↓ CSV</a>
+  </div>
+</div>
+<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:18px">CFM 2.454/2026 exige retencao de 5 anos. Prompts e respostas armazenados apenas como hash (LGPD).</div>
+
+${erro ? `<div class="card" style="border-color:rgba(239,68,68,0.4);color:#fca5a5">${erro}</div>` : ""}
+
+<div class="grid" style="margin-bottom:18px">
+  ${stats.por_modelo.map(m => `<div class="card" style="padding:16px">
+    <div style="font-size:11px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:4px">${m.modelo}</div>
+    <div style="font-size:22px;font-weight:600">${m.qtd}</div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:4px">${m.tokens.toLocaleString('pt-BR')} tokens</div>
+  </div>`).join("")}
+</div>
+
+<div class="card">
+  <table style="font-size:12px">
+    <thead><tr>
+      <th style="padding:10px 14px">Timestamp</th>
+      <th style="padding:10px 14px">Agente</th>
+      <th style="padding:10px 14px">Modelo</th>
+      <th style="padding:10px 14px;text-align:right">Tokens</th>
+      <th style="padding:10px 14px;font-family:monospace">Hash</th>
+    </tr></thead>
+    <tbody>
+      ${rows.slice(0, 200).map(r => `<tr class="row">
+        <td style="padding:10px 14px;font-family:monospace;color:rgba(255,255,255,0.6)">${new Date(r.ts).toLocaleString("pt-BR")}</td>
+        <td style="padding:10px 14px">${r.agente || "—"}</td>
+        <td style="padding:10px 14px;color:rgba(255,255,255,0.6)">${r.modelo}</td>
+        <td style="padding:10px 14px;text-align:right">${(r.tokens_in||0)+(r.tokens_out||0)}</td>
+        <td style="padding:10px 14px;font-family:monospace;font-size:10px;color:rgba(255,255,255,0.4)">${(r.prompt_hash||"").slice(0,12)}…${(r.response_hash||"").slice(0,8)}</td>
+      </tr>`).join("") || '<tr><td colspan="5" style="padding:40px;text-align:center;color:rgba(255,255,255,0.4)">Sem registros</td></tr>'}
+    </tbody>
+  </table>
+</div>
+</div></body></html>`);
+  });
+
+  // ===== DASHBOARD EXECUTIVO (graficos com Chart.js via CDN) =====
+  router.get("/dashboard", autenticar, async (req, res) => {
+    let dados = { leads_por_dia: [], temperatura: {}, agendamentos_por_dia: [], receita_30d: 0, conversas_total: 0 };
+
+    try {
+      if (db.pool) {
+        // Leads por dia, ultimos 30 dias
+        const r1 = await db.pool.query(`
+          SELECT TO_CHAR(DATE(to_timestamp(ultima_atividade/1000)), 'YYYY-MM-DD') AS dia,
+                 COUNT(*)::int AS qtd
+          FROM conversations
+          WHERE ultima_atividade > EXTRACT(EPOCH FROM NOW() - INTERVAL '30 days') * 1000
+          GROUP BY dia ORDER BY dia
+        `);
+        dados.leads_por_dia = r1.rows;
+
+        const r2 = await db.pool.query(`
+          SELECT temperatura, COUNT(*)::int AS qtd
+          FROM conversations WHERE status='ativo' GROUP BY temperatura
+        `);
+        r2.rows.forEach(r => { dados.temperatura[r.temperatura || "indef"] = r.qtd; });
+
+        const r3 = await db.pool.query("SELECT COUNT(*)::int AS qtd FROM conversations");
+        dados.conversas_total = r3.rows[0].qtd;
+
+        try {
+          const r4 = await db.pool.query(`
+            SELECT TO_CHAR(DATE(data_hora), 'YYYY-MM-DD') AS dia, COUNT(*)::int AS qtd
+            FROM agendamentos
+            WHERE data_hora > NOW() - INTERVAL '30 days' AND data_hora < NOW() + INTERVAL '30 days'
+            GROUP BY dia ORDER BY dia
+          `);
+          dados.agendamentos_por_dia = r4.rows;
+
+          const r5 = await db.pool.query(`
+            SELECT COALESCE(SUM(valor), 0) AS total
+            FROM pagamentos
+            WHERE status IN ('pago','confirmado') AND created_at > NOW() - INTERVAL '30 days'
+          `);
+          dados.receita_30d = Number(r5.rows[0].total || 0);
+        } catch (_) {}
+      }
+    } catch (e) { dados.erro = e.message; }
+
+    const dadosJSON = JSON.stringify(dados);
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dashboard executivo — HairTech</title>
+<style>${CSS_BASE}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+.kpi{padding:24px;text-align:center}.kpi .v{font-size:32px;font-weight:700;letter-spacing:-1px}.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.4);margin-top:6px}
+canvas{max-width:100%}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body><div style="max-width:1280px;margin:0 auto;padding:32px 24px">
+${navbar("", "dashboard")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Dashboard executivo</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">Visao 30 dias</div>
+
+<div class="grid" style="margin-bottom:20px">
+  <div class="card kpi"><div class="v" id="kpi-conversas">—</div><div class="l">Conversas total</div></div>
+  <div class="card kpi"><div class="v" id="kpi-quentes">—</div><div class="l">Leads quentes ativos</div></div>
+  <div class="card kpi"><div class="v" id="kpi-agend">—</div><div class="l">Agendamentos 30d</div></div>
+  <div class="card kpi"><div class="v" id="kpi-rec">—</div><div class="l">Receita 30d</div></div>
+</div>
+
+<div class="grid">
+  <div class="card" style="padding:24px"><h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px">Leads ativos por dia</h2><canvas id="g-leads" height="180"></canvas></div>
+  <div class="card" style="padding:24px"><h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px">Distribuicao temperatura</h2><canvas id="g-temp" height="180"></canvas></div>
+</div>
+
+<div class="card" style="padding:24px;margin-top:18px"><h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:14px">Agendamentos por dia (-30d / +30d)</h2><canvas id="g-agend" height="120"></canvas></div>
+
+<script>
+  const dados = ${dadosJSON};
+  document.getElementById('kpi-conversas').textContent = dados.conversas_total || 0;
+  document.getElementById('kpi-quentes').textContent = dados.temperatura.quente || 0;
+  document.getElementById('kpi-agend').textContent = (dados.agendamentos_por_dia || []).reduce((s,d) => s+d.qtd, 0);
+  document.getElementById('kpi-rec').textContent = 'R$ ' + Number(dados.receita_30d || 0).toFixed(2).replace('.', ',');
+
+  const corBase = 'rgba(124,58,237,0.6)';
+  Chart.defaults.color = 'rgba(255,255,255,0.6)';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+
+  new Chart(document.getElementById('g-leads'), {
+    type: 'line',
+    data: {
+      labels: dados.leads_por_dia.map(d => d.dia.slice(5)),
+      datasets: [{ label: 'leads ativos', data: dados.leads_por_dia.map(d => d.qtd), borderColor: corBase, backgroundColor: 'rgba(124,58,237,0.15)', fill: true, tension: 0.3 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  new Chart(document.getElementById('g-temp'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(dados.temperatura),
+      datasets: [{ data: Object.values(dados.temperatura), backgroundColor: ['#ff3b30', '#ff9f0a', '#8e8e93', '#666'] }]
+    },
+    options: { responsive: true }
+  });
+
+  new Chart(document.getElementById('g-agend'), {
+    type: 'bar',
+    data: {
+      labels: dados.agendamentos_por_dia.map(d => d.dia.slice(5)),
+      datasets: [{ label: 'agendamentos', data: dados.agendamentos_por_dia.map(d => d.qtd), backgroundColor: 'rgba(59,130,246,0.6)' }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+</script>
+</div></body></html>`);
+  });
+
+  // ===== AGENDA-LINK (URL secreta do feed ICS pra assinar no app de calendar) =====
+  router.get("/agenda-link", autenticar, (req, res) => {
+    const token = process.env.AGENDA_ICS_TOKEN || "trocar-este-token-no-env";
+    const url = `https://hairtech.org/agenda.ics?token=${encodeURIComponent(token)}`;
+    const urlWebcal = url.replace(/^https?:/, "webcal:");
+    const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(urlWebcal)}`;
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sincronizar agenda — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:780px;margin:0 auto;padding:32px 24px">
+${navbar("", "agendamentos")}
+<h1 style="font-size:24px;margin-bottom:6px">Sincronizar agenda com seu celular</h1>
+<div style="color:rgba(255,255,255,0.5);font-size:13px;margin-bottom:24px">Funciona com Apple Calendar, Google Calendar, Outlook, Fantastical e qualquer app que suporte feed iCal.</div>
+
+<div class="card" style="margin-bottom:18px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:12px">Apple Calendar (iPhone/iPad)</h2>
+  <ol style="font-size:13px;color:rgba(255,255,255,0.7);line-height:2;margin-left:20px">
+    <li>Aponte a camera do iPhone pro QR Code abaixo, OU copie o link</li>
+    <li>Toque em "Abrir no Calendario" — vai oferecer adicionar como calendario assinado</li>
+    <li>Confirme "Adicionar" e escolha frequencia de atualizacao (sugiro 15 min)</li>
+  </ol>
+  <div style="text-align:center;margin:20px 0">
+    <img src="${qrApi}" alt="QR" style="border-radius:12px;border:6px solid rgba(255,255,255,0.1)"/>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:12px">Google Calendar</h2>
+  <ol style="font-size:13px;color:rgba(255,255,255,0.7);line-height:2;margin-left:20px">
+    <li>Abre calendar.google.com em desktop</li>
+    <li>Sidebar esquerda → "Outros calendarios" → "+" → "Por URL"</li>
+    <li>Cola a URL abaixo (versao HTTPS) e salva</li>
+  </ol>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:12px">URLs</h2>
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px">webcal (iPhone/Mac):</div>
+  <input value="${urlWebcal}" readonly style="margin-bottom:14px;font-family:monospace;font-size:11px"/>
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px">https (Google/Outlook):</div>
+  <input value="${url}" readonly style="font-family:monospace;font-size:11px"/>
+</div>
+
+<div class="card" style="border-color:rgba(245,158,11,0.4)">
+  <div style="font-size:13px;color:#ff9f0a;font-weight:600;margin-bottom:6px">Mantenha esta URL secreta</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.6">
+    Qualquer pessoa com este link ve sua agenda (nomes de pacientes, telefones, valores).
+    Pra trocar o token: edita <code>AGENDA_ICS_TOKEN</code> no .env e remove+adiciona o calendar.
+  </div>
+</div>
+</div></body></html>`);
   });
 
   // ===== AGENDAMENTOS (visualizacao) =====
@@ -1186,6 +1442,9 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/handoff", titulo: "Handoff", desc: "Pedidos pendentes de acao humana (CAPTCHA, login)", cor: "#f59e0b", icon: "🖐" },
       { href: "/admin/aprovar-fila", titulo: "Fila de aprovacao", desc: "Re-engajamento pro-ativo de leads inativos (revisar antes de enviar)", cor: "#22c55e", icon: "✉" },
       { href: "/admin/agendamentos", titulo: "Agenda", desc: "Consultas e procedimentos dos proximos 60 dias", cor: "#3b82f6", icon: "📅" },
+      { href: "/admin/agenda-link", titulo: "Sincronizar celular", desc: "Conecta agenda HairTech ao Apple/Google Calendar do seu telefone", cor: "#06b6d4", icon: "📲" },
+      { href: "/admin/dashboard", titulo: "Dashboard executivo", desc: "Graficos de leads, receita, agendamentos (Chart.js)", cor: "#8b5cf6", icon: "📈" },
+      { href: "/admin/audit", titulo: "Audit IA", desc: "Log CFM 2.454/2026 de todas as chamadas de IA (retencao 5 anos)", cor: "#94a3b8", icon: "📝" },
       { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
       { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },
     ];

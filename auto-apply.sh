@@ -280,6 +280,16 @@ fi
 touch /var/log/hairtech-proactive.log
 chmod 640 /var/log/hairtech-proactive.log
 
+# T29: Gera AGENDA_ICS_TOKEN no .env se faltar (uniqueness por VPS).
+if [ -f /home/user/nodejs/.env ] && ! grep -q "^AGENDA_ICS_TOKEN=" /home/user/nodejs/.env; then
+  NEW_TOK=$(openssl rand -hex 24 2>/dev/null || head -c 24 /dev/urandom | xxd -p)
+  echo "" >> /home/user/nodejs/.env
+  echo "# Feed iCalendar publico (Apple/Google Calendar)" >> /home/user/nodejs/.env
+  echo "AGENDA_ICS_TOKEN=$NEW_TOK" >> /home/user/nodejs/.env
+  chmod 600 /home/user/nodejs/.env
+  echo "[T29] AGENDA_ICS_TOKEN gerado e gravado no .env"
+fi
+
 # T25: Escreve status.json pra /admin/status ler.
 STATUS_FILE=/home/user/nodejs/status.json
 {

@@ -369,6 +369,7 @@ setInterval(() => {
 
 app.use("/admin", adminRouter(conversas, enviarMensagem));
 app.use("/admin/export", require("./export-leads"));
+app.use("/", require("./agenda-ics"));
 const apiInternal = require("./api-internal");
 apiInternal.setEnviarMensagem(enviarMensagem);
 app.use("/api/internal", apiInternal);
