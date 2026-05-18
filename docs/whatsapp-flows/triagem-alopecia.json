@@ -1,0 +1,176 @@
+{
+  "version": "5.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "DADOS_BASICOS": ["AVALIACAO_CAPILAR"],
+    "AVALIACAO_CAPILAR": ["FINALIZAR"],
+    "FINALIZAR": []
+  },
+  "screens": [
+    {
+      "id": "DADOS_BASICOS",
+      "title": "Conta sobre voce",
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "dados_form",
+            "children": [
+              {
+                "type": "TextInput",
+                "label": "Seu nome completo",
+                "name": "nome",
+                "input-type": "text",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "label": "Idade",
+                "name": "idade",
+                "input-type": "number",
+                "required": true
+              },
+              {
+                "type": "Dropdown",
+                "label": "Sexo biologico",
+                "name": "sexo",
+                "required": true,
+                "data-source": [
+                  {"id": "masc", "title": "Masculino"},
+                  {"id": "fem", "title": "Feminino"}
+                ]
+              },
+              {
+                "type": "TextInput",
+                "label": "Cidade onde mora",
+                "name": "cidade",
+                "input-type": "text",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Proximo",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": {"type": "screen", "name": "AVALIACAO_CAPILAR"},
+                  "payload": {
+                    "nome": "${form.nome}",
+                    "idade": "${form.idade}",
+                    "sexo": "${form.sexo}",
+                    "cidade": "${form.cidade}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "AVALIACAO_CAPILAR",
+      "title": "Sua queda de cabelo",
+      "data": {
+        "nome": {"type": "string", "__example__": "Joao"},
+        "idade": {"type": "string", "__example__": "35"},
+        "sexo": {"type": "string", "__example__": "masc"},
+        "cidade": {"type": "string", "__example__": "Rio de Janeiro"}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "avaliacao_form",
+            "children": [
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Ha quanto tempo voce nota queda?",
+                "name": "tempo_queda",
+                "required": true,
+                "data-source": [
+                  {"id": "6m", "title": "Menos de 6 meses"},
+                  {"id": "1a", "title": "6 meses a 1 ano"},
+                  {"id": "3a", "title": "1 a 3 anos"},
+                  {"id": "5a", "title": "3 a 5 anos"},
+                  {"id": "10a", "title": "Mais de 5 anos"}
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Como classifica sua perda hoje?",
+                "name": "intensidade",
+                "required": true,
+                "data-source": [
+                  {"id": "leve", "title": "Leve (rarefacao discreta)"},
+                  {"id": "moderada", "title": "Moderada (entradas/coroa visivel)"},
+                  {"id": "avancada", "title": "Avancada (areas calvas)"},
+                  {"id": "total", "title": "Calvicie quase total"}
+                ]
+              },
+              {
+                "type": "CheckboxGroup",
+                "label": "Voce tem...",
+                "name": "comorbidades",
+                "required": false,
+                "data-source": [
+                  {"id": "alope_androgen", "title": "Alopecia androgenetica diagnosticada"},
+                  {"id": "alope_areata", "title": "Alopecia areata"},
+                  {"id": "diabetes", "title": "Diabetes"},
+                  {"id": "tireoide", "title": "Problema de tireoide"},
+                  {"id": "anemia", "title": "Anemia / deficiencia ferro"},
+                  {"id": "hiv_hepatite", "title": "HIV / Hepatite B ou C"},
+                  {"id": "outro", "title": "Outra condicao"},
+                  {"id": "nenhum", "title": "Nenhuma das anteriores"}
+                ]
+              },
+              {
+                "type": "Dropdown",
+                "label": "Ja tentou tratamento medicamentoso?",
+                "name": "tratamento_previo",
+                "required": true,
+                "data-source": [
+                  {"id": "nunca", "title": "Nunca"},
+                  {"id": "minoxidil", "title": "Minoxidil (topico)"},
+                  {"id": "finasterida", "title": "Finasterida (oral)"},
+                  {"id": "ambos", "title": "Minoxidil + Finasterida"},
+                  {"id": "outro", "title": "Outro"}
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Seu objetivo principal",
+                "name": "objetivo",
+                "required": true,
+                "data-source": [
+                  {"id": "transplante", "title": "Transplante FUE"},
+                  {"id": "tratamento_clinico", "title": "Tratamento clinico (sem cirurgia)"},
+                  {"id": "avaliar", "title": "Quero entender o que e melhor pra mim"}
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Enviar para o medico",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "nome": "${data.nome}",
+                    "idade": "${data.idade}",
+                    "sexo": "${data.sexo}",
+                    "cidade": "${data.cidade}",
+                    "tempo_queda": "${form.tempo_queda}",
+                    "intensidade": "${form.intensidade}",
+                    "comorbidades": "${form.comorbidades}",
+                    "tratamento_previo": "${form.tratamento_previo}",
+                    "objetivo": "${form.objetivo}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

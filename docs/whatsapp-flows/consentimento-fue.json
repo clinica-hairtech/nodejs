@@ -1,0 +1,187 @@
+{
+  "version": "5.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "EXPLICACAO": ["CIENCIA_RISCOS"],
+    "CIENCIA_RISCOS": ["AUTORIZACAO"],
+    "AUTORIZACAO": []
+  },
+  "screens": [
+    {
+      "id": "EXPLICACAO",
+      "title": "TCLE - FUE (1/3)",
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Termo de Consentimento Livre e Esclarecido"
+          },
+          {
+            "type": "TextBody",
+            "text": "Voce esta prestes a se submeter a tecnica FUE (Follicular Unit Extraction). Sao retirados foliculos da regiao doadora (nuca) e implantados na area receptora. Procedimento ambulatorial sob anestesia local, duracao 6 a 10 horas."
+          },
+          {
+            "type": "TextBody",
+            "text": "Resultado final visivel entre 9 a 12 meses. Densidade depende de caracteristicas individuais da sua area doadora. NAO ha garantia de cobertura 100%."
+          },
+          {
+            "type": "Form",
+            "name": "ciencia_form",
+            "children": [
+              {
+                "type": "OptIn",
+                "label": "Li e compreendi a explicacao acima",
+                "name": "leu_explicacao",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Proximo - riscos",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": {"type": "screen", "name": "CIENCIA_RISCOS"},
+                  "payload": {"leu_explicacao": "${form.leu_explicacao}"}
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CIENCIA_RISCOS",
+      "title": "TCLE - FUE (2/3)",
+      "data": {
+        "leu_explicacao": {"type": "boolean", "__example__": true}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Riscos e limitacoes"
+          },
+          {
+            "type": "TextBody",
+            "text": "Riscos possiveis: edema temporario, sangramento, infeccao, dor pos-operatoria, alteracao de sensibilidade na area doadora ou receptora, foliculite, cicatriz pontilhada (caracteristica da FUE)."
+          },
+          {
+            "type": "TextBody",
+            "text": "Eventualmente, pode ser necessaria 2a sessao para refinar densidade. Cuidados pos-operatorios (medicacao, evitar sol/esforco/piscina por 30 dias) sao OBRIGATORIOS."
+          },
+          {
+            "type": "TextBody",
+            "text": "Foto antes/depois pode ser usada para fins didaticos com seu rosto borrado, mediante autorizacao explicita abaixo."
+          },
+          {
+            "type": "Form",
+            "name": "riscos_form",
+            "children": [
+              {
+                "type": "OptIn",
+                "label": "Compreendi os riscos e limitacoes",
+                "name": "ciente_riscos",
+                "required": true
+              },
+              {
+                "type": "OptIn",
+                "label": "Autorizo uso de fotos com rosto borrado para fins didaticos",
+                "name": "autoriza_foto_didatica",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Proximo - autorizacao",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": {"type": "screen", "name": "AUTORIZACAO"},
+                  "payload": {
+                    "leu_explicacao": "${data.leu_explicacao}",
+                    "ciente_riscos": "${form.ciente_riscos}",
+                    "autoriza_foto_didatica": "${form.autoriza_foto_didatica}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "AUTORIZACAO",
+      "title": "TCLE - FUE (3/3)",
+      "data": {
+        "leu_explicacao": {"type": "boolean", "__example__": true},
+        "ciente_riscos": {"type": "boolean", "__example__": true},
+        "autoriza_foto_didatica": {"type": "boolean", "__example__": false}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Autorizo formalmente"
+          },
+          {
+            "type": "Form",
+            "name": "autorizacao_form",
+            "children": [
+              {
+                "type": "TextInput",
+                "label": "Nome completo (igual no documento)",
+                "name": "nome_completo",
+                "input-type": "text",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "label": "CPF (somente numeros)",
+                "name": "cpf",
+                "input-type": "number",
+                "required": true,
+                "min-chars": 11,
+                "max-chars": 11
+              },
+              {
+                "type": "OptIn",
+                "label": "AUTORIZO o procedimento FUE conduzido pelo Dr. Ricardo Marcelino (CRM-RJ) na Clinica HairTech",
+                "name": "autoriza_procedimento",
+                "required": true
+              },
+              {
+                "type": "OptIn",
+                "label": "Tive todas as duvidas esclarecidas previamente",
+                "name": "duvidas_esclarecidas",
+                "required": true
+              },
+              {
+                "type": "TextBody",
+                "text": "Versao do termo: 1.0 (maio/2026). Este consentimento sera assinado digitalmente apos validacao do medico responsavel."
+              },
+              {
+                "type": "Footer",
+                "label": "Confirmar consentimento",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "leu_explicacao": "${data.leu_explicacao}",
+                    "ciente_riscos": "${data.ciente_riscos}",
+                    "autoriza_foto_didatica": "${data.autoriza_foto_didatica}",
+                    "nome_completo": "${form.nome_completo}",
+                    "cpf": "${form.cpf}",
+                    "autoriza_procedimento": "${form.autoriza_procedimento}",
+                    "duvidas_esclarecidas": "${form.duvidas_esclarecidas}",
+                    "versao_termo": "1.0",
+                    "data_consentimento": "${now}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

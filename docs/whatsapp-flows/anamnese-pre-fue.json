@@ -1,0 +1,228 @@
+{
+  "version": "5.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SAUDE_GERAL": ["HABITOS"],
+    "HABITOS": ["MEDICACOES"],
+    "MEDICACOES": ["FINALIZAR"],
+    "FINALIZAR": []
+  },
+  "screens": [
+    {
+      "id": "SAUDE_GERAL",
+      "title": "Anamnese - parte 1",
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "saude_form",
+            "children": [
+              {
+                "type": "CheckboxGroup",
+                "label": "Voce tem alguma destas condicoes?",
+                "name": "condicoes",
+                "required": false,
+                "data-source": [
+                  {"id": "diabetes", "title": "Diabetes"},
+                  {"id": "hipertensao", "title": "Hipertensao"},
+                  {"id": "cardiaca", "title": "Cardiopatia"},
+                  {"id": "tireoide", "title": "Disturbio de tireoide"},
+                  {"id": "renal", "title": "Insuficiencia renal"},
+                  {"id": "autoimune", "title": "Doenca autoimune (lupus, psoriase, etc)"},
+                  {"id": "coagulacao", "title": "Disturbio de coagulacao"},
+                  {"id": "cancer", "title": "Cancer (em tratamento ou recente)"},
+                  {"id": "nenhum", "title": "Nenhuma"}
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "HIV, Hepatite B ou C?",
+                "name": "infecciosas",
+                "required": true,
+                "data-source": [
+                  {"id": "nao", "title": "Nao"},
+                  {"id": "hiv", "title": "HIV"},
+                  {"id": "hepb", "title": "Hepatite B"},
+                  {"id": "hepc", "title": "Hepatite C"},
+                  {"id": "outra", "title": "Outra"}
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Alergia a anestesico local?",
+                "name": "alergia_anestesico",
+                "required": true,
+                "data-source": [
+                  {"id": "nao", "title": "Nao"},
+                  {"id": "sim", "title": "Sim"},
+                  {"id": "nao_sei", "title": "Nao sei"}
+                ]
+              },
+              {
+                "type": "TextArea",
+                "label": "Outras alergias (medicamentos, latex, etc)",
+                "name": "outras_alergias",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Proximo",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": {"type": "screen", "name": "HABITOS"},
+                  "payload": {
+                    "condicoes": "${form.condicoes}",
+                    "infecciosas": "${form.infecciosas}",
+                    "alergia_anestesico": "${form.alergia_anestesico}",
+                    "outras_alergias": "${form.outras_alergias}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "HABITOS",
+      "title": "Anamnese - parte 2",
+      "data": {
+        "condicoes": {"type": "string", "__example__": "nenhum"},
+        "infecciosas": {"type": "string", "__example__": "nao"},
+        "alergia_anestesico": {"type": "string", "__example__": "nao"},
+        "outras_alergias": {"type": "string", "__example__": ""}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "habitos_form",
+            "children": [
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Voce fuma?",
+                "name": "fuma",
+                "required": true,
+                "data-source": [
+                  {"id": "nao", "title": "Nao"},
+                  {"id": "social", "title": "Socialmente"},
+                  {"id": "diario", "title": "Diariamente"}
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Bebida alcoolica?",
+                "name": "alcool",
+                "required": true,
+                "data-source": [
+                  {"id": "nao", "title": "Nao bebo"},
+                  {"id": "social", "title": "Socialmente"},
+                  {"id": "frequente", "title": "Frequentemente"}
+                ]
+              },
+              {
+                "type": "TextInput",
+                "label": "Pratica atividade fisica? Quais?",
+                "name": "atividade",
+                "input-type": "text",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Proximo",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": {"type": "screen", "name": "MEDICACOES"},
+                  "payload": {
+                    "condicoes": "${data.condicoes}",
+                    "infecciosas": "${data.infecciosas}",
+                    "alergia_anestesico": "${data.alergia_anestesico}",
+                    "outras_alergias": "${data.outras_alergias}",
+                    "fuma": "${form.fuma}",
+                    "alcool": "${form.alcool}",
+                    "atividade": "${form.atividade}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "MEDICACOES",
+      "title": "Anamnese - parte 3",
+      "data": {
+        "condicoes": {"type": "string", "__example__": "nenhum"},
+        "infecciosas": {"type": "string", "__example__": "nao"},
+        "alergia_anestesico": {"type": "string", "__example__": "nao"},
+        "outras_alergias": {"type": "string", "__example__": ""},
+        "fuma": {"type": "string", "__example__": "nao"},
+        "alcool": {"type": "string", "__example__": "nao"},
+        "atividade": {"type": "string", "__example__": ""}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "med_form",
+            "children": [
+              {
+                "type": "TextArea",
+                "label": "Medicamentos de uso continuo (nome e dose)",
+                "name": "medicamentos",
+                "required": false
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Usa anticoagulante (AAS, varfarina, rivaroxabana)?",
+                "name": "anticoagulante",
+                "required": true,
+                "data-source": [
+                  {"id": "nao", "title": "Nao"},
+                  {"id": "sim", "title": "Sim"},
+                  {"id": "nao_sei", "title": "Nao sei"}
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Ja fez cirurgia capilar antes?",
+                "name": "cirurgia_previa",
+                "required": true,
+                "data-source": [
+                  {"id": "nao", "title": "Nao"},
+                  {"id": "sim_fue", "title": "Sim - FUE"},
+                  {"id": "sim_fut", "title": "Sim - FUT (em tira)"},
+                  {"id": "sim_outro", "title": "Sim - outro tipo"}
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Finalizar anamnese",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "condicoes": "${data.condicoes}",
+                    "infecciosas": "${data.infecciosas}",
+                    "alergia_anestesico": "${data.alergia_anestesico}",
+                    "outras_alergias": "${data.outras_alergias}",
+                    "fuma": "${data.fuma}",
+                    "alcool": "${data.alcool}",
+                    "atividade": "${data.atividade}",
+                    "medicamentos": "${form.medicamentos}",
+                    "anticoagulante": "${form.anticoagulante}",
+                    "cirurgia_previa": "${form.cirurgia_previa}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
