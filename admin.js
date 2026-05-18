@@ -730,11 +730,11 @@ ${navbar("", "prontuario")}
 <div class="card" style="border-color:rgba(245,158,11,0.4);margin-bottom:18px">
   <div style="font-size:13px;color:#ff9f0a;font-weight:600;margin-bottom:6px">Aviso legal</div>
   <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.6">
-    Este modulo e <strong>auxiliar</strong>. Para valor legal pleno (CFM 2.299/2021 e Lei 13.787/2018) o prontuario eletronico precisa de:
-    <strong>(1)</strong> certificacao SBIS/CFM (NGS1 ou NGS2),
-    <strong>(2)</strong> assinatura digital ICP-Brasil (e-CPF A1/A3 do medico),
-    <strong>(3)</strong> backup off-site e log de auditoria de 20 anos.<br/>
-    Use isso pra organizar consultas e fotos — para emitir laudo oficial, assine com e-CPF e exporte PDF carimbado.
+    Este modulo e <strong>auxiliar</strong>. Para validade legal plena use:<br/>
+    <strong>· Receitas:</strong> Prescricao Eletronica Nacional CFM (botao "Prescrever" no paciente)<br/>
+    <strong>· Atestados:</strong> Atesta CFM (obrigatorio desde 05/03/2025 — Res. 2.382/2024)<br/>
+    <strong>· Laudo/relatorio:</strong> "Laudo PDF" + assinatura ICP-Brasil via VIDaaS ou certificado A3 CFM em nuvem<br/>
+    <strong style="color:#34d399">· Certificado digital: GRATIS via CRM Virtual CFM</strong> (Res. 2.296/2021 — economiza R\$300/ano).
   </div>
 </div>
 <div class="card">
@@ -774,9 +774,10 @@ ${navbar("", "prontuario")}
       <textarea name="anamnese" rows="6" style="margin-bottom:12px" placeholder="QP, HMA, antecedentes, exame fisico...">${p.anamnese || ""}</textarea>
       <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Conduta / Plano</h2>
       <textarea name="conduta" rows="4" style="margin-bottom:14px" placeholder="Protocolo, prescricao, retorno...">${p.conduta || ""}</textarea>
-      <div style="display:flex;gap:8px">
-        <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#a78bfa;flex:1;justify-content:center">Salvar</button>
-        <a href="/admin/prontuario/${num}/laudo" target="_blank" class="btn" style="background:rgba(16,185,129,0.3);border-color:rgba(16,185,129,0.5);color:#34d399">Gerar laudo PDF</a>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#a78bfa;flex:1;min-width:120px;justify-content:center">Salvar</button>
+        <a href="/admin/prontuario/${num}/laudo" target="_blank" class="btn" style="background:rgba(16,185,129,0.3);border-color:rgba(16,185,129,0.5);color:#34d399">Laudo PDF</a>
+        <a href="/admin/prontuario/${num}/prescrever" class="btn" style="background:rgba(59,130,246,0.3);border-color:rgba(59,130,246,0.5);color:#60a5fa">Prescrever</a>
       </div>
     </form>
     <form method="POST" action="/admin/prontuario/${num}/consulta" class="card" style="padding:20px">
@@ -808,6 +809,85 @@ ${navbar("", "prontuario")}
     p.atualizado_em = new Date().toISOString();
     salvarProntuario(num, p);
     res.redirect(`/admin/prontuario/${num}`);
+  });
+
+  // ===== CFM TOKEN (componente embarcado de prescricao) =====
+  // Frontend chama isso pra obter token client_credentials. Cache 4min.
+  router.get("/cfm-token", autenticar, async (req, res) => {
+    try {
+      const cfm = require("./integrations/cfm-prescricao");
+      if (!cfm.configured()) {
+        return res.status(503).json({
+          error: "CFM nao configurado",
+          como_ativar: "Solicitar credenciais em sistemas.cfm.org.br/contatoprescricaoeletronica/br e adicionar CFM_CLIENT_ID/SECRET ao .env",
+          status: cfm.status(),
+        });
+      }
+      const token = await cfm.obterToken();
+      res.json({ access_token: token, expires_in: 240, ambiente: cfm.AMBIENTE });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.get("/prontuario/:numero/prescrever", autenticar, (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    const c = conversas[num] || {};
+    const cfm = (() => { try { return require("./integrations/cfm-prescricao").status(); } catch (_) { return null; } })();
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Prescrever — ${c.nome || num}</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+${navbar("", "prontuario")}
+<a href="/admin/prontuario/${num}" style="color:rgba(255,255,255,0.5);text-decoration:none;font-size:13px">← Voltar pro prontuario</a>
+<h1 style="font-size:24px;margin:18px 0">Prescrever pra ${c.nome || num}</h1>
+
+<div class="card" style="margin-bottom:18px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:12px">Caminho oficial: Prescricao Eletronica Nacional CFM</h2>
+  <div style="font-size:13px;color:rgba(255,255,255,0.7);line-height:1.7">
+    Status: <strong>${cfm && cfm.configurado ? cfm.ambiente : "nao configurado"}</strong><br/>
+    Componente oficial embarcado, integra Atesta CFM (atestados) e farmacias (CFF).
+    Doctor assina com certificado A3 em nuvem ICP-Brasil (gratuito via CRM Virtual CFM).<br/><br/>
+    ${cfm && cfm.configurado
+      ? `<a href="https://${cfm.ambiente === 'PRODUCAO' ? 'prescricaoeletronica' : 'prescricao-hml'}.cfm.org.br" target="_blank" class="btn" style="background:#3b82f622;border-color:#3b82f666;color:#3b82f6">Abrir CFM Prescricao Eletronica</a>`
+      : `<div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);padding:10px;border-radius:8px;font-size:12px">
+          Para ativar:
+          <ol style="margin-left:20px;margin-top:6px;line-height:1.8">
+            <li>Solicitar credenciais em <a href="https://sistemas.cfm.org.br/contatoprescricaoeletronica/br" target="_blank" style="color:#fbbf24">sistemas.cfm.org.br</a></li>
+            <li>Receber CFM_CLIENT_ID e CFM_CLIENT_SECRET (homologacao)</li>
+            <li>Adicionar ao .env do AV</li>
+            <li>Reiniciar AV (auto via T26)</li>
+          </ol>
+         </div>`
+    }
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:12px">Alternativa: Memed</h2>
+  <div style="font-size:13px;color:rgba(255,255,255,0.7);line-height:1.7">
+    +323 integracoes nacionais. Grátis pro medico. Componente JS embarcavel.<br/>
+    Status: ${process.env.MEMED_API_KEY ? "<strong>configurado</strong>" : "nao configurado"}<br/><br/>
+    <a href="https://memed.com.br/integracao" target="_blank" class="btn" style="background:#7c3aed22;border-color:#7c3aed66;color:#a78bfa">Cadastrar no Memed</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:12px">Atestado oficial</h2>
+  <div style="font-size:13px;color:rgba(255,255,255,0.7);line-height:1.7">
+    Desde 05/03/2025 (Res. CFM 2.382/2024), atestados OBRIGATORIAMENTE devem ser emitidos pelo barramento Atesta CFM ou sistemas integrados.<br/><br/>
+    <a href="https://atesta.cfm.org.br" target="_blank" class="btn" style="background:#10b98122;border-color:#10b98166;color:#10b981">Abrir Atesta CFM</a>
+  </div>
+</div>
+
+<div class="card" style="border-color:rgba(16,185,129,0.4)">
+  <div style="font-size:13px;color:#34d399;font-weight:600;margin-bottom:6px">Certificado digital — GRATUITO no CFM</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.6">
+    Resolucao CFM 2.296/2021 garante <strong>A3 em nuvem ICP-Brasil grátis</strong> via CRM Virtual (AC Valid).<br/>
+    Pre-requisitos: CRM ativo, CIM em policarbonato, biometria atualizada, sem certificado nos ultimos 12 meses.<br/>
+    Obter em <a href="https://crmvirtual.cfm.org.br" target="_blank" style="color:#a7f3d0">crmvirtual.cfm.org.br</a> — assina prescricoes/atestados/laudos sem pagar R\$300/ano.
+  </div>
+</div>
+</div></body></html>`);
   });
 
   // ===== LAUDO PDF (print-friendly, sem npm dep) =====
