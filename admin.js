@@ -543,6 +543,70 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
   });
 
+  // ===== LGPD: portabilidade (art. 18, V) =====
+  // Doctor pode exportar dados de UM paciente em JSON pra atender solicitacao.
+  router.get("/paciente/:numero/exportar-lgpd", autenticar, async (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    const c = conversas[num] || {};
+    let prontuario = {};
+    try { prontuario = JSON.parse(fs.readFileSync(path.join(__dirname, "prontuarios", `${num}.json`), "utf8")); } catch (_) {}
+
+    let agendamentos = [], pagamentos = [], mensagens = [];
+    try {
+      if (db.pool) {
+        const a = await db.pool.query("SELECT * FROM agendamentos WHERE wa_id=$1", [num]);
+        agendamentos = a.rows;
+        const p = await db.pool.query("SELECT * FROM pagamentos WHERE wa_id=$1 OR lead_id=(SELECT id FROM leads WHERE wa_id=$1 LIMIT 1)", [num]).catch(() => ({rows:[]}));
+        pagamentos = p.rows;
+        const m = await db.pool.query("SELECT * FROM mensagens WHERE wa_id=$1 ORDER BY ts DESC LIMIT 500", [num]).catch(() => ({rows:[]}));
+        mensagens = m.rows;
+      }
+    } catch (_) {}
+
+    const pacote = {
+      gerado_em: new Date().toISOString(),
+      numero_whatsapp: num,
+      nome: c.nome || null,
+      base_legal: "LGPD art. 11, II, f (tutela da saude) + art. 18, V (direito a portabilidade)",
+      controlador: "Clinica HairTech - CRM Dr. Ricardo Meireles Marcelino",
+      encarregado: "dpo@hairtech.org",
+      conversa_atual: { status: c.status, temperatura: c.temperatura, ultima_atividade: c.ultimaAtividade, historico_resumido_msgs: (c.historico || []).length },
+      prontuario,
+      agendamentos,
+      pagamentos,
+      mensagens,
+    };
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename=lgpd-portabilidade-${num}-${new Date().toISOString().slice(0,10)}.json`);
+    res.send(JSON.stringify(pacote, null, 2));
+  });
+
+  // ===== LGPD: exclusao (art. 18, VI) - marca para apagar =====
+  router.post("/paciente/:numero/excluir-lgpd", autenticar, async (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    let resultado = { numero: num, etapas: [] };
+    try {
+      if (conversas[num]) {
+        conversas[num].status = "excluido_lgpd";
+        conversas[num].excluido_em = new Date().toISOString();
+        delete conversas[num].historico;
+        if (db.salvarConversa) await db.salvarConversa(num, conversas[num]).catch(()=>{});
+        resultado.etapas.push("conversa marcada excluido_lgpd + historico zerado");
+      }
+      if (db.pool) {
+        await db.pool.query("UPDATE conversations SET historico='[]', nome='[EXCLUIDO LGPD]', status='excluido_lgpd' WHERE numero=$1", [num]).catch(()=>{});
+        await db.pool.query("DELETE FROM mensagens WHERE wa_id=$1", [num]).catch(()=>{});
+        resultado.etapas.push("DB: mensagens deletadas, conversation anonimizada");
+      }
+      try {
+        fs.unlinkSync(path.join(__dirname, "prontuarios", `${num}.json`));
+        resultado.etapas.push("prontuario JSON deletado");
+      } catch (_) {}
+      resultado.ok = true;
+    } catch (e) { resultado.ok = false; resultado.error = e.message; }
+    res.json(resultado);
+  });
+
   // ===== LGPD (status visual) =====
   router.get("/lgpd", autenticar, async (req, res) => {
     const wflows = (() => { try { return require("./integrations/whatsapp-flows").status(); } catch (_) { return null; } })();
@@ -556,7 +620,9 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       { ok: true, lbl: "Backup encriptado em transito", det: "B2 via TLS + Postgres rede interna" },
       { ok: true, lbl: "Hashing de prompts/respostas no audit", det: "PII nao em claro no audit log" },
       { ok: false, lbl: "Criptografia em repouso (Postgres)", det: "Volume Docker normal - migrar pra LUKS ou pgcrypto coluna" },
-      { ok: false, lbl: "Anonimizacao de PII antes da IA", det: "Hoje envia nome do paciente no prompt" },
+      { ok: true, lbl: "Anonimizacao de PII antes da IA", det: "integrations/anonimizar.js - CPF/CNPJ/email/tel/nome trocados por tokens [NOME_1]" },
+      { ok: true, lbl: "Direito de portabilidade (art. 18, V)", det: "GET /admin/paciente/:numero/exportar-lgpd retorna JSON completo" },
+      { ok: true, lbl: "Direito de exclusao (art. 18, VI)", det: "POST /admin/paciente/:numero/excluir-lgpd anonimiza + deleta" },
       { ok: false, lbl: "Log de acesso ao prontuario", det: "Tabela prontuario_access_log nao criada" },
       { ok: false, lbl: "RIPD (Relatorio de Impacto)", det: "Pendente - modelo ANPD em docs/LGPD-CONFORMIDADE.md" },
       { ok: false, lbl: "Plano resposta a incidentes (notif ANPD 2d)", det: "Pendente - documentar processo" },

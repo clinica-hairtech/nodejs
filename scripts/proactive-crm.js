@@ -7,6 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 const crypto = require("crypto");
+const { anonimizar, desanonimizar } = require("../integrations/anonimizar");
 
 const DIAS_INATIVO = parseInt(process.env.PROACTIVE_DIAS_INATIVO || "7", 10);
 const MAX_POR_DIA = parseInt(process.env.PROACTIVE_MAX_POR_DIA || "20", 10);
@@ -50,20 +51,34 @@ async function gerarMensagem(c) {
   const hist = Array.isArray(c.historico) ? c.historico : [];
   const ultimaDele = [...hist].reverse().find((m) => m.role === "user");
   const ultMsg = ultimaDele ? (ultimaDele.content || "").substring(0, 220) : "";
+
+  // Anonimiza PII antes de chamar IA (LGPD)
+  const { texto_anon: ultMsgAnon, mapa } = anonimizar(ultMsg, { nomePaciente: nome });
+  const primeiroNome = nome.split(" ")[0] || "";
+
   const prompt = `Voce e atendente da Clinica HairTech (transplante capilar FUE, Rio de Janeiro).
-Um lead chamado ${nome || "[sem nome]"} (temperatura: ${c.temperatura}) ficou ${DIAS_INATIVO}+ dias sem responder.
-A ultima mensagem dele foi: "${ultMsg || "(sem texto)"}"
+Um lead (referencia: ${primeiroNome ? "[NOME_1]" : "[lead]"}, temperatura: ${c.temperatura}) ficou ${DIAS_INATIVO}+ dias sem responder.
+A ultima mensagem dele foi: "${ultMsgAnon || "(sem texto)"}"
 
 Escreva uma mensagem de re-engajamento natural em portugues brasileiro, com 1-2 frases (max 40 palavras).
 Tom: caloroso, sem pressao comercial, perguntando se ele ainda tem interesse.
 NAO mencione "ja faz X dias". NAO se apresente. NAO use mais de 1 emoji.
+Use o token [NOME_1] no lugar do nome - sera substituido depois.
 Comece direto, como continuacao natural da conversa.`;
-  try {
-    return await chamarOllama(prompt);
-  } catch (e) {
-    console.warn("[proactive-crm] ollama falhou:", e.message);
-    return await chamarGemini(prompt);
+
+  // Adiciona o nome ao mapa se nao foi encontrado no texto
+  if (primeiroNome && !Object.values(mapa).includes(primeiroNome)) {
+    mapa["[NOME_1]"] = primeiroNome;
   }
+
+  let resp;
+  try { resp = await chamarOllama(prompt); }
+  catch (e) {
+    console.warn("[proactive-crm] ollama falhou:", e.message);
+    resp = await chamarGemini(prompt);
+  }
+  // Restaura PII na mensagem final pra enviar ao paciente
+  return desanonimizar(resp, mapa);
 }
 
 async function main() {
