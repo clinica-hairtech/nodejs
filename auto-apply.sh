@@ -258,19 +258,22 @@ if [ -f /home/user/nodejs/ALLOW_RESTART.flag ]; then
 fi
 
 # T28: Cron de agentes pro-ativos.
-# Roda scripts/proactive-crm.js diariamente 10h (BRT = 13h UTC).
 # Executa DENTRO do container AV via docker exec (heranca de ENV + acesso DB).
 PROACTIVE_CRON=/etc/cron.d/hairtech-proactive
-if [ ! -f "$PROACTIVE_CRON" ] || ! grep -q "proactive-crm" "$PROACTIVE_CRON" 2>/dev/null; then
+if [ ! -f "$PROACTIVE_CRON" ] || ! grep -q "proactive-fin" "$PROACTIVE_CRON" 2>/dev/null; then
   cat > "$PROACTIVE_CRON" <<'PROCEOF'
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# CRM pro-ativo: 13h UTC = 10h BRT
+# CRM pro-ativo (re-engajamento leads inativos): 10h BRT = 13h UTC
 0 13 * * * root docker exec assistente-virtual node /usr/src/app/scripts/proactive-crm.js >> /var/log/hairtech-proactive.log 2>&1
+# POS-FUE follow-up (D+1/3/7/15/30): 09h BRT = 12h UTC
+0 12 * * * root docker exec assistente-virtual node /usr/src/app/scripts/proactive-pos.js >> /var/log/hairtech-proactive.log 2>&1
+# FIN resumo diario: 18h BRT = 21h UTC
+0 21 * * * root docker exec assistente-virtual node /usr/src/app/scripts/proactive-fin.js >> /var/log/hairtech-proactive.log 2>&1
 PROCEOF
   chmod 644 "$PROACTIVE_CRON"
   systemctl restart cron 2>/dev/null
-  echo "[T28] cron pro-ativo instalado"
+  echo "[T28] cron pro-ativo instalado/atualizado (crm + pos + fin)"
 else
   echo "[T28] cron pro-ativo ja existe"
 fi

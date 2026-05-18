@@ -138,6 +138,7 @@ function navbar(senha, ativa) {
     { href: `/admin/status${q}`, label: "Status", id: "status" },
     { href: `/admin/handoff${q}`, label: "Handoff", id: "handoff" },
     { href: `/admin/aprovar-fila${q}`, label: "Fila", id: "aprovar-fila" },
+    { href: `/admin/agendamentos${q}`, label: "Agenda", id: "agendamentos" },
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
     { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
@@ -536,6 +537,77 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
       } catch (e) { console.error("Erro ao enviar do painel:", e.message); }
     }
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
+  });
+
+  // ===== AGENDAMENTOS (visualizacao) =====
+  router.get("/agendamentos", autenticar, async (req, res) => {
+    let rows = [];
+    let erro = null;
+    try {
+      const r = await db.pool.query(`
+        SELECT a.id, a.wa_id, a.tipo, a.data_hora, a.duracao_min, a.status, a.valor, a.observacoes,
+               c.nome
+        FROM agendamentos a
+        LEFT JOIN conversations c ON c.numero = a.wa_id
+        WHERE a.data_hora > NOW() - INTERVAL '7 days'
+          AND a.data_hora < NOW() + INTERVAL '60 days'
+        ORDER BY a.data_hora ASC
+      `);
+      rows = r.rows;
+    } catch (e) { erro = e.message; }
+
+    const corStatus = { agendado: "#3b82f6", confirmado: "#10b981", realizada: "#22c55e", cancelado: "#ef4444", no_show: "#f59e0b" };
+    const formatDH = (dh) => {
+      const d = new Date(dh);
+      return d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }) +
+        " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+    };
+
+    let html = "";
+    if (rows.length === 0) {
+      html = `<div style="padding:60px 20px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum agendamento nos proximos 60 dias.</div>`;
+    } else {
+      // Agrupa por dia
+      const byDay = new Map();
+      rows.forEach(r => {
+        const k = new Date(r.data_hora).toISOString().slice(0, 10);
+        if (!byDay.has(k)) byDay.set(k, []);
+        byDay.get(k).push(r);
+      });
+      html = [...byDay.entries()].map(([dia, lista]) => {
+        const d = new Date(dia + "T12:00:00Z");
+        const label = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+        const itens = lista.map(r => {
+          const cor = corStatus[r.status] || "#8e8e93";
+          return `<div style="display:flex;align-items:center;gap:14px;padding:14px;border-left:3px solid ${cor};background:rgba(255,255,255,0.03);border-radius:0 12px 12px 0;margin-bottom:8px">
+            <div style="font-family:monospace;font-size:14px;font-weight:600;min-width:60px">${new Date(r.data_hora).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:500">${r.nome || r.wa_id}</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.5)">${r.tipo} · ${r.duracao_min}min ${r.valor?'· '+Number(r.valor).toFixed(2):''}</div>
+              ${r.observacoes ? `<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px">${r.observacoes.substring(0,100)}</div>` : ""}
+            </div>
+            <span class="tag" style="background:${cor}33;border-color:${cor}66;color:${cor};white-space:nowrap">${r.status}</span>
+          </div>`;
+        }).join("");
+        return `<div style="margin-bottom:24px">
+          <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:12px">${label}</h2>
+          ${itens}
+        </div>`;
+      }).join("");
+    }
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Agenda — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:1100px;margin:0 auto;padding:32px 24px">
+${navbar("", "agendamentos")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+  <h1 style="font-size:24px;font-weight:700">Agenda — proximos 60 dias</h1>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4)">${rows.length} agendamento(s)</div>
+</div>
+${erro ? `<div class="card" style="border-color:rgba(239,68,68,0.4);color:#fca5a5;margin-bottom:18px">${erro}</div>` : ""}
+${html}
+</div></body></html>`);
   });
 
   // ===== APROVAR-FILA (re-engajamento pro-ativo) =====
@@ -1033,6 +1105,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/status", titulo: "Status", desc: "Saude dos containers, OpenClaw, flags", cor: "#10b981", icon: "💚" },
       { href: "/admin/handoff", titulo: "Handoff", desc: "Pedidos pendentes de acao humana (CAPTCHA, login)", cor: "#f59e0b", icon: "🖐" },
       { href: "/admin/aprovar-fila", titulo: "Fila de aprovacao", desc: "Re-engajamento pro-ativo de leads inativos (revisar antes de enviar)", cor: "#22c55e", icon: "✉" },
+      { href: "/admin/agendamentos", titulo: "Agenda", desc: "Consultas e procedimentos dos proximos 60 dias", cor: "#3b82f6", icon: "📅" },
       { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
       { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },
     ];
