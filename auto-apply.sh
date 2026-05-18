@@ -206,6 +206,23 @@ else
   echo "[T24]   nao running (state=$OC_RUNNING) - skip"
 fi
 
+# T26: Se ALLOW_RESTART.flag existe E arquivos do AV mudaram, force-recreate.
+# Sem isso, commits em app.js/admin.js/db.js nao chegam no container rodando.
+if [ -f /home/user/nodejs/ALLOW_RESTART.flag ]; then
+  LAST_AV=/tmp/hairtech-av-last-deployed-sha
+  CUR_SHA=$(git -C /home/user/nodejs log -1 --pretty=%H -- app.js admin.js db.js retomada.js lembretes.js relatorio.js nfse.js heygen.js calendar.js systemPrompt.js 2>/dev/null)
+  PREV_SHA=$(cat "$LAST_AV" 2>/dev/null)
+  if [ -n "$CUR_SHA" ] && [ "$CUR_SHA" != "$PREV_SHA" ]; then
+    echo "[T26] AV files changed ($PREV_SHA -> $CUR_SHA) -> force-recreate"
+    (cd /home/user/nodejs && docker compose up -d --force-recreate assistente-virtual 2>&1 | tail -3 | sed 's/^/[T26] /')
+    echo "$CUR_SHA" > "$LAST_AV"
+    sleep 6
+    docker logs assistente-virtual --tail 5 2>&1 | sed 's/^/[T26] /'
+  else
+    echo "[T26] AV files inalterados, skip recreate"
+  fi
+fi
+
 # T25: Escreve status.json pra /admin/status ler.
 STATUS_FILE=/home/user/nodejs/status.json
 {
