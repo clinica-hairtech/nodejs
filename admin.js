@@ -134,8 +134,10 @@ function navbar(senha, ativa) {
     { href: `/admin/portal`, label: "Portal", id: "portal" },
     { href: `/admin${q}`, label: "Dashboard", id: "dash" },
     { href: `/admin/kanban${q}`, label: "Pipeline", id: "kanban" },
+    { href: `/admin/agentes${q}`, label: "Agentes", id: "agentes" },
     { href: `/admin/status${q}`, label: "Status", id: "status" },
     { href: `/admin/handoff${q}`, label: "Handoff", id: "handoff" },
+    { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
     { href: `/admin/logout`, label: "Sair", id: "logout" },
   ];
   return `
@@ -535,6 +537,183 @@ label{font-size:11px;color:rgba(255,255,255,0.38);display:block;margin-bottom:4p
     res.redirect(`/admin/conversa/${numero}?senha=${senha}`);
   });
 
+  // ===== PRONTUARIO (auxiliar, NAO substitui certificado SBIS) =====
+  const PRONT_DIR = path.join(__dirname, "prontuarios");
+  try { fs.mkdirSync(PRONT_DIR, { recursive: true }); } catch (_) {}
+
+  function lerProntuario(numero) {
+    try { return JSON.parse(fs.readFileSync(path.join(PRONT_DIR, `${numero}.json`), "utf8")); }
+    catch (_) { return { numero, anamnese: "", conduta: "", consultas: [], fotos: [] }; }
+  }
+  function salvarProntuario(numero, dados) {
+    fs.writeFileSync(path.join(PRONT_DIR, `${numero}.json`), JSON.stringify(dados, null, 2));
+  }
+
+  router.get("/prontuario", autenticar, (req, res) => {
+    const pacientes = Object.entries(conversas).map(([num, c]) => ({
+      numero: num,
+      nome: c.nome || "Sem nome",
+      ultima: c.ultimaAtividade ? new Date(c.ultimaAtividade).toLocaleDateString("pt-BR") : "—",
+      temp: c.temperatura || "frio",
+    })).sort((a,b) => (b.ultima||"").localeCompare(a.ultima||""));
+
+    const linhas = pacientes.map(p => `<tr class="row">
+      <td style="padding:14px 16px"><a href="/admin/prontuario/${p.numero}" style="color:#fff;text-decoration:none;font-weight:500">${p.nome}</a></td>
+      <td style="padding:14px 16px;color:rgba(255,255,255,0.5);font-family:monospace">${p.numero}</td>
+      <td style="padding:14px 16px;color:rgba(255,255,255,0.5)">${p.ultima}</td>
+      <td style="padding:14px 16px"><span class="tag" style="background:${COR_TEMP[p.temp]};color:${DOT_TEMP[p.temp]};border-color:${DOT_TEMP[p.temp]}66">${p.temp}</span></td>
+    </tr>`).join("");
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Prontuario — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:1280px;margin:0 auto;padding:32px 24px">
+${navbar("", "prontuario")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:8px">Prontuario</h1>
+<div class="card" style="border-color:rgba(245,158,11,0.4);margin-bottom:18px">
+  <div style="font-size:13px;color:#ff9f0a;font-weight:600;margin-bottom:6px">Aviso legal</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.6">
+    Este modulo e <strong>auxiliar</strong>. Para valor legal pleno (CFM 2.299/2021 e Lei 13.787/2018) o prontuario eletronico precisa de:
+    <strong>(1)</strong> certificacao SBIS/CFM (NGS1 ou NGS2),
+    <strong>(2)</strong> assinatura digital ICP-Brasil (e-CPF A1/A3 do medico),
+    <strong>(3)</strong> backup off-site e log de auditoria de 20 anos.<br/>
+    Use isso pra organizar consultas e fotos — para emitir laudo oficial, assine com e-CPF e exporte PDF carimbado.
+  </div>
+</div>
+<div class="card">
+  <table><thead><tr>
+    <th style="padding:12px 16px">Nome</th><th style="padding:12px 16px">Numero</th><th style="padding:12px 16px">Ultima atividade</th><th style="padding:12px 16px">Lead</th>
+  </tr></thead><tbody>${linhas || '<tr><td colspan="4" style="padding:30px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum paciente ainda</td></tr>'}</tbody></table>
+</div>
+</div></body></html>`);
+  });
+
+  router.get("/prontuario/:numero", autenticar, (req, res) => {
+    const num = req.params.numero.replace(/\D/g,"");
+    const c = conversas[num] || {};
+    const p = lerProntuario(num);
+    const historicoMsg = (c.historico || []).slice(-30).map(m => `<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:10px;margin-bottom:6px"><div style="font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:3px">${m.role}</div><div style="font-size:13px">${(m.content||"").substring(0,400)}</div></div>`).join("");
+
+    const consultasHTML = (p.consultas || []).map(co => `<div class="card" style="margin-bottom:10px;padding:14px">
+      <div style="font-weight:600;margin-bottom:4px">${co.data} · ${co.tipo || "consulta"}</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.7);white-space:pre-wrap">${co.observacoes || ""}</div>
+    </div>`).join("") || '<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.4)">Sem consultas registradas</div>';
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${c.nome || num} — Prontuario</title><style>${CSS_BASE}.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:18px}</style></head>
+<body><div style="max-width:1280px;margin:0 auto;padding:32px 24px">
+${navbar("", "prontuario")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+  <div>
+    <h1 style="font-size:24px;font-weight:700">${c.nome || "Sem nome"}</h1>
+    <div style="font-size:13px;color:rgba(255,255,255,0.5);font-family:monospace">${num}</div>
+  </div>
+  <a href="/admin/prontuario" style="color:rgba(255,255,255,0.5);text-decoration:none">← lista</a>
+</div>
+<div class="grid2">
+  <div>
+    <form method="POST" action="/admin/prontuario/${num}/salvar" class="card" style="padding:20px;margin-bottom:14px">
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Anamnese</h2>
+      <textarea name="anamnese" rows="6" style="margin-bottom:12px" placeholder="QP, HMA, antecedentes, exame fisico...">${p.anamnese || ""}</textarea>
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Conduta / Plano</h2>
+      <textarea name="conduta" rows="4" style="margin-bottom:14px" placeholder="Protocolo, prescricao, retorno...">${p.conduta || ""}</textarea>
+      <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#a78bfa;width:100%;justify-content:center">Salvar</button>
+    </form>
+    <form method="POST" action="/admin/prontuario/${num}/consulta" class="card" style="padding:20px">
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Nova consulta</h2>
+      <input name="tipo" placeholder="tipo (avaliacao, retorno, FUE...)" style="margin-bottom:10px"/>
+      <textarea name="observacoes" rows="4" placeholder="observacoes da consulta" style="margin-bottom:12px"></textarea>
+      <button type="submit" class="btn" style="background:rgba(236,72,153,0.3);border-color:rgba(236,72,153,0.5);color:#f9a8d4;width:100%;justify-content:center">Registrar consulta</button>
+    </form>
+  </div>
+  <div>
+    <div class="card" style="padding:20px;margin-bottom:14px">
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Consultas (${(p.consultas||[]).length})</h2>
+      ${consultasHTML}
+    </div>
+    <div class="card" style="padding:20px">
+      <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:12px">Conversa WhatsApp (ultimas 30 msgs)</h2>
+      <div style="max-height:400px;overflow-y:auto">${historicoMsg || '<div style="color:rgba(255,255,255,0.4);font-size:13px">Sem conversa registrada</div>'}</div>
+    </div>
+  </div>
+</div>
+</div></body></html>`);
+  });
+
+  router.post("/prontuario/:numero/salvar", autenticar, (req, res) => {
+    const num = req.params.numero.replace(/\D/g,"");
+    const p = lerProntuario(num);
+    p.anamnese = (req.body?.anamnese || "").toString();
+    p.conduta = (req.body?.conduta || "").toString();
+    p.atualizado_em = new Date().toISOString();
+    salvarProntuario(num, p);
+    res.redirect(`/admin/prontuario/${num}`);
+  });
+
+  router.post("/prontuario/:numero/consulta", autenticar, (req, res) => {
+    const num = req.params.numero.replace(/\D/g,"");
+    const p = lerProntuario(num);
+    p.consultas = p.consultas || [];
+    p.consultas.unshift({
+      id: crypto.randomBytes(6).toString("hex"),
+      data: new Date().toLocaleDateString("pt-BR"),
+      tipo: (req.body?.tipo || "consulta").toString().slice(0, 60),
+      observacoes: (req.body?.observacoes || "").toString(),
+    });
+    salvarProntuario(num, p);
+    res.redirect(`/admin/prontuario/${num}`);
+  });
+
+  // ===== AGENTES (lista + invoke teste) =====
+  router.get("/agentes", autenticar, async (req, res) => {
+    let agentes = [];
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(__dirname, "status.json"), "utf8"));
+      agentes = (s.agents_list || []).slice();
+    } catch (_) {}
+    if (agentes.length === 0) {
+      agentes = ["AV","ANA","MED","NF","CRM","MKT","POS","ADMIN","ESTOQUE","FOTO","FIN","EDU","COMP"];
+    }
+    let ocHealth = null;
+    try {
+      const oc = require("./integrations/openclaw");
+      const h = await oc.health();
+      ocHealth = h.ok ? h.data : { error: h.last };
+    } catch (e) { ocHealth = { error: e.message }; }
+
+    const cards = agentes.map(a => `<div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-weight:700;font-size:16px;letter-spacing:.5px">${a}</div>
+        <span class="tag" style="background:#34c75933;border-color:#34c75966;color:#34c759">disponivel</span>
+      </div>
+      <form method="POST" action="/admin/agentes/${a}/invoke" style="display:flex;gap:8px">
+        <input name="prompt" placeholder="testar prompt..." required style="flex:1;padding:8px 10px;font-size:12px"/>
+        <button type="submit" class="btn" style="background:rgba(255,255,255,0.1);padding:8px 14px;font-size:12px">▶</button>
+      </form>
+    </div>`).join("");
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Agentes — HairTech</title><style>${CSS_BASE}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}</style></head>
+<body><div style="max-width:1280px;margin:0 auto;padding:32px 24px">
+${navbar("", "agentes")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Agentes OpenClaw</h1>
+<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:20px">OpenClaw health: <code>${JSON.stringify(ocHealth).slice(0,160)}</code></div>
+<div class="grid">${cards}</div>
+</div></body></html>`);
+  });
+
+  router.post("/agentes/:nome/invoke", autenticar, express.urlencoded({extended:true}), async (req, res) => {
+    const oc = require("./integrations/openclaw");
+    const r = await oc.invokeAgent(req.params.nome, (req.body?.prompt || "").toString());
+    const senha = req.query.senha;
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Resultado</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+<h1 style="font-size:22px;margin-bottom:18px">Invoke ${req.params.nome}</h1>
+<div class="card" style="white-space:pre-wrap;font-family:monospace;font-size:12px;color:rgba(255,255,255,0.7)">${JSON.stringify(r, null, 2)}</div>
+<a class="btn" href="/admin/agentes${senha?'?senha='+senha:''}" style="margin-top:18px;background:rgba(255,255,255,0.1)">← voltar</a>
+</div></body></html>`);
+  });
+
   // ===== STATUS (infra + OpenClaw) =====
   router.get("/status", autenticar, (req, res) => {
     const senha = req.query.senha;
@@ -675,8 +854,10 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
     const cards = [
       { href: "/admin", titulo: "Conversas", desc: "Dashboard de leads e atendimentos no WhatsApp", cor: "#7c3aed", icon: "💬" },
       { href: "/admin/kanban", titulo: "Pipeline", desc: "Kanban de oportunidades por status", cor: "#06b6d4", icon: "📊" },
-      { href: "/admin/status", titulo: "Status do sistema", desc: "Saude dos containers, OpenClaw, agentes", cor: "#10b981", icon: "💚" },
-      { href: "/admin/handoff", titulo: "Handoff ao vivo", desc: "Assumir o controle quando OpenClaw pedir CAPTCHA / login", cor: "#f59e0b", icon: "🖐" },
+      { href: "/admin/prontuario", titulo: "Prontuario", desc: "Ficha do paciente, anamnese, fotos, conduta", cor: "#ec4899", icon: "🩺" },
+      { href: "/admin/agentes", titulo: "Agentes", desc: "13 agentes OpenClaw com invoke de teste", cor: "#0ea5e9", icon: "🤖" },
+      { href: "/admin/status", titulo: "Status", desc: "Saude dos containers, OpenClaw, flags", cor: "#10b981", icon: "💚" },
+      { href: "/admin/handoff", titulo: "Handoff", desc: "Pedidos pendentes de acao humana (CAPTCHA, login)", cor: "#f59e0b", icon: "🖐" },
       { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
       { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },
     ];
@@ -720,16 +901,30 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
 
     const filaHTML = fila.length === 0
       ? `<div style="padding:60px 20px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum pedido pendente.<br/><span style="font-size:12px">Quando OpenClaw precisar de CAPTCHA ou login manual, aparece aqui.</span></div>`
-      : fila.map(p => `<div class="card" style="margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:start;gap:14px;flex-wrap:wrap">
-            <div>
-              <div style="font-size:16px;font-weight:600;margin-bottom:4px">${p.titulo || "Acao manual"}</div>
-              <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:8px">${p.descricao || ""}</div>
-              <div style="font-size:11px;color:rgba(255,255,255,0.35)">agente: ${p.agente || "?"} · solicitado: ${p.criado_em || "?"}</div>
+      : fila.map(p => {
+          const promptIA = encodeURIComponent(`Continue esta tarefa do agente ${p.agente || "?"}: ${p.titulo}. ${p.descricao || ""} URL: ${p.url || "(sem URL)"}`);
+          const linkClaude = `https://claude.ai/new?q=${promptIA}`;
+          const linkManus = `https://manus.im/?q=${promptIA}`;
+          const linkOperator = p.url ? p.url : `https://operator.chatgpt.com/`;
+          return `<div class="card" style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;align-items:start;gap:14px;flex-wrap:wrap">
+              <div style="flex:1;min-width:260px">
+                <div style="font-size:16px;font-weight:600;margin-bottom:4px">${p.titulo || "Acao manual"}</div>
+                <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:8px">${p.descricao || ""}</div>
+                <div style="font-size:11px;color:rgba(255,255,255,0.35)">agente: ${p.agente || "?"} · ${p.criado_em || "?"}</div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                ${p.url ? `<a class="btn" href="${p.url}" target="_blank" style="background:#3b82f622;border-color:#3b82f666;color:#3b82f6">Browser</a>` : ""}
+                <a class="btn" href="${linkClaude}" target="_blank" style="background:#d97a4022;border-color:#d97a4066;color:#d97a40">Claude</a>
+                <a class="btn" href="${linkManus}" target="_blank" style="background:#7c3aed22;border-color:#7c3aed66;color:#a78bfa">Manus</a>
+                <a class="btn" href="${linkOperator}" target="_blank" style="background:#10b98122;border-color:#10b98166;color:#10b981">Operator</a>
+                <form method="POST" action="/admin/handoff/${p.id}/resolver" style="display:inline">
+                  <button type="submit" class="btn" style="background:#22c55e22;border-color:#22c55e66;color:#22c55e">✓ Resolver</button>
+                </form>
+              </div>
             </div>
-            ${p.url ? `<a class="btn" href="${p.url}" target="_blank" style="background:#f59e0b22;border-color:#f59e0b66;color:#f59e0b">Abrir →</a>` : ""}
-          </div>
-        </div>`).join("");
+          </div>`;
+        }).join("");
 
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -753,20 +948,29 @@ ${filaHTML}
 </div></body></html>`);
   });
 
-  router.post("/handoff", autenticar, express.json(), (req, res) => {
+  router.post("/handoff", autenticar, express.json(), async (req, res) => {
     const { agente, titulo, descricao, url } = req.body || {};
     if (!titulo) return res.status(400).json({ error: "titulo obrigatorio" });
     let fila = [];
     const arquivo = path.join(__dirname, "handoff-queue.json");
     try { fila = JSON.parse(fs.readFileSync(arquivo, "utf8")); if (!Array.isArray(fila)) fila = []; } catch (_) {}
-    fila.push({
+    const pedido = {
       id: crypto.randomBytes(8).toString("hex"),
       agente: agente || "desconhecido",
       titulo, descricao, url,
       criado_em: new Date().toISOString(),
-    });
+    };
+    fila.push(pedido);
     fs.writeFileSync(arquivo, JSON.stringify(fila.slice(-50), null, 2));
-    res.json({ ok: true, total: fila.length });
+
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+    const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+    const txt = `🖐 HairTech handoff\nAgente: ${pedido.agente}\n${pedido.titulo}\n${pedido.descricao || ""}\n${pedido.url ? "URL: " + pedido.url : ""}\n\nResolver: https://hairtech.org/admin/handoff`;
+    require("axios").post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+      chat_id: tgChat, text: txt.slice(0, 3800), disable_web_page_preview: true,
+    }, { timeout: 5000 }).catch(() => {});
+
+    res.json({ ok: true, id: pedido.id, total: fila.length });
   });
 
   router.post("/handoff/:id/resolver", autenticar, (req, res) => {
