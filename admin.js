@@ -1911,22 +1911,37 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
   });
 
   // ===== PORTAL (landing pos-login) =====
-  router.get("/portal", autenticar, (req, res) => {
+  router.get("/portal", autenticar, async (req, res) => {
+    // Contadores de pendentes para destaque visual
+    const contadores = { handoff: 0, fila: 0, vencimentos: 0, incidentes: 0, leads_quentes: 0 };
+    try {
+      const fHandoff = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, "handoff-queue.json"), "utf8")); } catch(_) { return []; } })();
+      contadores.handoff = fHandoff.filter(p => p && p.status === "pendente" || !p.status).length;
+      const fFila = (() => { try { return JSON.parse(fs.readFileSync(CRM_FILA_FILE, "utf8")); } catch(_) { return []; } })();
+      contadores.fila = fFila.filter(p => p.status === "pendente").length;
+      const fVenc = (() => { try { return JSON.parse(fs.readFileSync(VENC_FILE, "utf8")); } catch(_) { return []; } })();
+      const hoje = new Date(); hoje.setHours(0,0,0,0);
+      contadores.vencimentos = fVenc.filter(v => v.ativo && v.vence_em && (new Date(v.vence_em) - hoje) / 86400000 <= 30).length;
+      const fInc = (() => { try { return JSON.parse(fs.readFileSync(INC_FILE, "utf8")); } catch(_) { return []; } })();
+      contadores.incidentes = fInc.filter(i => !i.notificacao_anpd && i.severidade === "alta").length;
+      contadores.leads_quentes = Object.values(conversas).filter(c => c.temperatura === "quente" && c.status === "ativo").length;
+    } catch (_) {}
+
     const cards = [
       { href: "/admin", titulo: "Conversas", desc: "Dashboard de leads e atendimentos no WhatsApp", cor: "#7c3aed", icon: "💬" },
       { href: "/admin/kanban", titulo: "Pipeline", desc: "Kanban de oportunidades por status", cor: "#06b6d4", icon: "📊" },
       { href: "/admin/prontuario", titulo: "Prontuario", desc: "Ficha do paciente, anamnese, fotos, conduta", cor: "#ec4899", icon: "🩺" },
       { href: "/admin/agentes", titulo: "Agentes", desc: "13 agentes OpenClaw com invoke de teste", cor: "#0ea5e9", icon: "🤖" },
       { href: "/admin/status", titulo: "Status", desc: "Saude dos containers, OpenClaw, flags", cor: "#10b981", icon: "💚" },
-      { href: "/admin/handoff", titulo: "Handoff", desc: "Pedidos pendentes de acao humana (CAPTCHA, login)", cor: "#f59e0b", icon: "🖐" },
-      { href: "/admin/aprovar-fila", titulo: "Fila de aprovacao", desc: "Re-engajamento pro-ativo de leads inativos (revisar antes de enviar)", cor: "#22c55e", icon: "✉" },
+      { href: "/admin/handoff", titulo: "Handoff", desc: "Pedidos pendentes de acao humana (CAPTCHA, login)", cor: "#f59e0b", icon: "🖐", badge: contadores.handoff },
+      { href: "/admin/aprovar-fila", titulo: "Fila de aprovacao", desc: "Re-engajamento pro-ativo de leads inativos (revisar antes de enviar)", cor: "#22c55e", icon: "✉", badge: contadores.fila },
       { href: "/admin/agendamentos", titulo: "Agenda", desc: "Consultas e procedimentos dos proximos 60 dias", cor: "#3b82f6", icon: "📅" },
       { href: "/admin/agenda-link", titulo: "Sincronizar celular", desc: "Conecta agenda HairTech ao Apple/Google Calendar do seu telefone", cor: "#06b6d4", icon: "📲" },
       { href: "/admin/dashboard", titulo: "Dashboard executivo", desc: "Graficos de leads, receita, agendamentos (Chart.js)", cor: "#8b5cf6", icon: "📈" },
       { href: "/admin/templates", titulo: "Templates", desc: "Mensagens prontas pra copiar e colar (12 templates pre-configurados)", cor: "#f97316", icon: "✂" },
-      { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋" },
+      { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋", badge: contadores.vencimentos },
       { href: "/admin/lgpd", titulo: "LGPD", desc: "Status de conformidade com Lei 13.709/2018 + DPO", cor: "#84cc16", icon: "🔒" },
-      { href: "/admin/incidentes", titulo: "Incidentes", desc: "Registro de incidentes LGPD com notificacao ANPD", cor: "#dc2626", icon: "🚨" },
+      { href: "/admin/incidentes", titulo: "Incidentes", desc: "Registro de incidentes LGPD com notificacao ANPD", cor: "#dc2626", icon: "🚨", badge: contadores.incidentes },
       { href: "/admin/audit", titulo: "Audit IA", desc: "Log CFM 2.454/2026 de todas as chamadas de IA (retencao 5 anos)", cor: "#94a3b8", icon: "📝" },
       { href: "/admin/exportar", titulo: "Exportar CSV", desc: "Baixar todos os leads em planilha", cor: "#8b5cf6", icon: "↓" },
       { href: "/admin/logout", titulo: "Sair", desc: "Encerrar sessao atual", cor: "#ef4444", icon: "↩" },
@@ -1950,7 +1965,8 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
     <a href="/admin/logout" class="btn" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.12);color:rgba(255,255,255,0.6)">Sair</a>
   </div>
   <div class="grid">
-    ${cards.map(c => `<a class="tile" href="${c.href}" style="border-left:3px solid ${c.cor}">
+    ${cards.map(c => `<a class="tile" href="${c.href}" style="border-left:3px solid ${c.cor};position:relative">
+      ${c.badge && c.badge > 0 ? `<div style="position:absolute;top:14px;right:14px;background:${c.cor};color:#fff;font-size:11px;font-weight:700;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 7px">${c.badge}</div>` : ""}
       <div class="ico" style="color:${c.cor}">${c.icon}</div>
       <div class="ttl">${c.titulo}</div>
       <div class="dsc">${c.desc}</div>
