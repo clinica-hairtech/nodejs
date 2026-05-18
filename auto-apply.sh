@@ -271,20 +271,21 @@ fi
 # T28: Cron de agentes pro-ativos.
 # Executa DENTRO do container AV via docker exec (heranca de ENV + acesso DB).
 PROACTIVE_CRON=/etc/cron.d/hairtech-proactive
-if [ ! -f "$PROACTIVE_CRON" ] || ! grep -q "proactive-edu" "$PROACTIVE_CRON" 2>/dev/null; then
+if [ ! -f "$PROACTIVE_CRON" ] || ! grep -q "PROACTIVE_VERSION=v2" "$PROACTIVE_CRON" 2>/dev/null; then
   cat > "$PROACTIVE_CRON" <<'PROCEOF'
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# PROACTIVE_VERSION=v2 (paths corrigidos /app)
 # CRM pro-ativo (re-engajamento leads inativos): 10h BRT = 13h UTC
-0 13 * * * root docker exec assistente-virtual node /usr/src/app/scripts/proactive-crm.js >> /var/log/hairtech-proactive.log 2>&1
+0 13 * * * root docker exec assistente-virtual node /app/scripts/proactive-crm.js >> /var/log/hairtech-proactive.log 2>&1
 # POS-FUE follow-up (D+1/3/7/15/30): 09h BRT = 12h UTC
-0 12 * * * root docker exec assistente-virtual node /usr/src/app/scripts/proactive-pos.js >> /var/log/hairtech-proactive.log 2>&1
+0 12 * * * root docker exec assistente-virtual node /app/scripts/proactive-pos.js >> /var/log/hairtech-proactive.log 2>&1
 # FIN resumo diario: 18h BRT = 21h UTC
-0 21 * * * root docker exec assistente-virtual node /usr/src/app/scripts/proactive-fin.js >> /var/log/hairtech-proactive.log 2>&1
+0 21 * * * root docker exec assistente-virtual node /app/scripts/proactive-fin.js >> /var/log/hairtech-proactive.log 2>&1
 # EDU PubMed semanal: segunda 08h BRT = 11h UTC
-0 11 * * 1 root docker exec assistente-virtual node /usr/src/app/scripts/proactive-edu.js >> /var/log/hairtech-proactive.log 2>&1
+0 11 * * 1 root docker exec assistente-virtual node /app/scripts/proactive-edu.js >> /var/log/hairtech-proactive.log 2>&1
 # COMP vencimentos semanal: segunda 08h05 BRT = 11h05 UTC
-5 11 * * 1 root docker exec assistente-virtual node /usr/src/app/scripts/proactive-comp.js >> /var/log/hairtech-proactive.log 2>&1
+5 11 * * 1 root docker exec assistente-virtual node /app/scripts/proactive-comp.js >> /var/log/hairtech-proactive.log 2>&1
 PROCEOF
   chmod 644 "$PROACTIVE_CRON"
   systemctl restart cron 2>/dev/null
