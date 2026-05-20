@@ -407,6 +407,16 @@ app.post("/webhook", async (req, res) => {
     }
     await enviarDisclosureSeNovo(from);
     const c = conversas[from];
+
+    // P0: detecta caso clinico/juridico/posop ANTES de chamar IA.
+    // Se P0: pausa bot, manda mensagem segura, alerta Dr. imediato. NUNCA deixa IA responder.
+    if (message.type === "text") {
+      const p0 = detectarP0(message.text.body);
+      if (p0) {
+        await tratarP0(from, p0, message.text.body);
+        return;
+      }
+    }
     if (c.status === "pausado" || c.status === "encerrado") {
       c.ultimaAtividade = Date.now();
       return;
@@ -642,12 +652,80 @@ async function encaminharFotoParaClinica(from, imageId) {
   } catch (e) { console.error("Erro ao encaminhar foto:", e.response?.data || e.message); }
 }
 
-async function notificarClinica(numeroPaciente, motivo) {
+// ===== P0 DETECTION (CFM 2.454/2026 - decisao critica sempre humana) =====
+// Gatilhos que NUNCA podem ser respondidos por IA. Bot vira "modo seguro":
+// - Pausa conversa (status=humano)
+// - Manda mensagem curta acolhendo
+// - Alerta Dr. via Telegram + WhatsApp imediato
+function detectarP0(texto) {
+  const t = (texto || "").toLowerCase();
+  // P0 CLINICO POS-OP: dor intensa, sangramento, secrecao com pus, febre, infeccao
+  if (/(operei|operacao|cirurgia|transplantei|fiz fue|pos.?op|pos.?cirurg|operad).*((dor (forte|intensa|muita)|sangrand|secre|pus|febre|infecc|inchad muito|vermelh muito|sair pus))/i.test(t) ||
+      /(dor (forte|intensa|muita)|sangrando muito|pus|febre|secrec).*(operei|cirurgia|transplant|enxert|fue)/i.test(t)) {
+    return { tipo: "clinico_posop", prioridade: "P0", motivo: "Possivel complicacao pos-operatoria" };
+  }
+  // P0 JURIDICO: ameaca, reclamacao formal, processo
+  if (/(processar|advogado|procon|justic|tribunal|reclamar formal|registrar reclam|denuncia|representac|devolver (o |meu )?dinheiro|estorn|reembols|exigi devolu|quero meu dinheiro)/i.test(t)) {
+    return { tipo: "juridico", prioridade: "P0", motivo: "Possivel reclamacao juridica/financeira" };
+  }
+  // P0 DOCUMENTO: solicitacao formal de prontuario/laudo/dados LGPD
+  if (/(preciso d[oe] (meu |meus )?(prontuario|laudo|documento|dados|relatorio medico)|quero (meu |meus )?(prontuario|laudo|dados)|lgpd|portabilidade|exclus.*dados|apagar (meus )?dados)/i.test(t)) {
+    return { tipo: "documento", prioridade: "P0", motivo: "Solicitacao formal de prontuario/dados (LGPD)" };
+  }
+  // P0 RISCO CLINICO GERAL: sintoma agudo sem contexto pos-op (cautela)
+  if (/(estou (com )?(muito mal|passando mal)|emergenc|nao consigo respirar|sangrando muito|desmaiei|desmaiou)/i.test(t)) {
+    return { tipo: "emergencia", prioridade: "P0", motivo: "Possivel emergencia medica" };
+  }
+  return null;
+}
+
+async function tratarP0(from, p0, textoOriginal) {
+  const c = conversas[from] || (conversas[from] = {
+    historico: [], ultimaAtividade: Date.now(), status: "ativo", tipo: "novo",
+    retomadas: 0, proximaRetomada: null, temperatura: "frio",
+  });
+  // Pausa bot - NUNCA mais IA responde sem doctor liberar
+  c.status = "humano";
+  c.proximaRetomada = null;
+  c.p0_marker = { tipo: p0.tipo, prioridade: p0.prioridade, motivo: p0.motivo, ts: Date.now() };
+  c.historico = c.historico || [];
+  c.historico.push({ role: "user", content: textoOriginal, ts: Date.now() });
+  if (db && db.salvarConversa) db.salvarConversa(from, c).catch(() => {});
+  if (db && db.salvarMensagem) db.salvarMensagem(from, "user", textoOriginal).catch(() => {});
+
+  // Mensagem segura ao paciente - sem fazer triagem clinica nem prometer nada
+  const respostas = {
+    clinico_posop: "Ola, recebi sua mensagem. Vou chamar o Dr. Ricardo agora mesmo pra te dar uma orientacao direta. Se for algo urgente (sangramento abundante, dor muito forte ou febre alta), procure um pronto-socorro proximo imediatamente. Em breve voce sera contatado.",
+    juridico: "Recebi sua mensagem. Vou encaminhar diretamente pro Dr. Ricardo, que retornara o contato pessoalmente o quanto antes.",
+    documento: "Recebi sua solicitacao de prontuario/dados. Vou encaminhar pro Dr. Ricardo, que tem ate 15 dias uteis para te atender conforme LGPD. Voce sera contatado em breve.",
+    emergencia: "Ola, recebi sua mensagem. Se for emergencia medica, ligue 192 (SAMU) imediatamente ou procure pronto-socorro. Vou chamar o Dr. Ricardo agora pra te dar suporte.",
+  };
+  const respPaciente = respostas[p0.tipo] || "Recebi sua mensagem, vou chamar o Dr. Ricardo pra te atender pessoalmente.";
+  try { await enviarMensagem(from, respPaciente); } catch (e) { console.error("[P0] falha enviando resposta segura:", e.message); }
+
+  // Alerta MAXIMA prioridade ao Dr.
+  const alerta = `*🚨 ALERTA P0 - ${p0.tipo.toUpperCase()}*\n\n*Motivo:* ${p0.motivo}\nPaciente: +${from}\nNome: ${c.nome || "(sem nome)"}\n\n*Texto do paciente:*\n"${textoOriginal.substring(0, 500)}"\n\nBot pausado (status=humano). Sua resposta e necessaria.\n\nAbrir conversa: https://hairtech.org/admin/conversa/${from}`;
+  // 1. WhatsApp do Dr.
+  try { await notificarClinica(from, alerta, "P0"); } catch (_) {}
+  // 2. Telegram (canal direto)
+  try {
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+    const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+    await axios.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+      chat_id: tgChat, text: alerta, parse_mode: "Markdown", disable_web_page_preview: true,
+    }, { timeout: 5000 });
+  } catch (e) { console.error("[P0] Telegram falhou:", e.message); }
+
+  console.log(`[P0] ${p0.prioridade} ${p0.tipo} acionado para ${from}`);
+}
+
+async function notificarClinica(numeroPaciente, motivo, prioridade) {
   if (!NOTIFY_PHONE) return;
   try {
     const temp = conversas[numeroPaciente]?.temperatura || "frio";
-    const emoji = temp === "quente" ? "LEAD QUENTE" : temp === "morno" ? "Lead morno" : "Lead frio";
-    const texto = `*HairTech — ${emoji}*\n\nPaciente: +${numeroPaciente}\nMotivo: ${motivo}\n\nAssuma o atendimento quando possivel.`;
+    const prio = prioridade ? `[${prioridade}]` : "";
+    const emoji = prioridade === "P0" ? "🚨 P0" : temp === "quente" ? "🔥 LEAD QUENTE" : temp === "morno" ? "⚠️ Lead morno" : "📋 Lead frio";
+    const texto = `*HairTech — ${emoji}* ${prio}\n\nPaciente: +${numeroPaciente}\nMotivo: ${motivo}\n\n${prioridade === "P0" ? "ATENCAO IMEDIATA NECESSARIA." : "Assuma o atendimento quando possivel."}`;
     await axios.post(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, { messaging_product: "whatsapp", to: NOTIFY_PHONE, type: "text", text: { body: texto } }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" }, timeout: 10000 });
   } catch (e) { console.error("Erro notificação:", e.response?.data || e.message); }
 }
