@@ -132,6 +132,7 @@ function navbar(senha, ativa) {
   const q = senha ? `?senha=${senha}` : "";
   const links = [
     { href: `/admin/portal`, label: "Portal", id: "portal" },
+    { href: `/admin/blitz${q}`, label: "⚡ BLITZ", id: "blitz" },
     { href: `/admin${q}`, label: "Conversas", id: "dash" },
     { href: `/admin/dashboard${q}`, label: "Dashboard", id: "dashboard" },
     { href: `/admin/kanban${q}`, label: "Pipeline", id: "kanban" },
@@ -1022,6 +1023,167 @@ ${navbar("", "dashboard")}
   });
 </script>
 </div></body></html>`);
+  });
+
+  // ===== BLITZ (botao de panico - 1 clique dispara tudo) =====
+  const BLITZ_MSGS_FILE = path.join(__dirname, "data", "blitz-mensagens.json");
+  function lerMsgsBlitz() {
+    try { return JSON.parse(fs.readFileSync(BLITZ_MSGS_FILE, "utf8")); }
+    catch (_) { return { quentes: "", mornos: "" }; }
+  }
+
+  router.get("/blitz", autenticar, (req, res) => {
+    const segs = segmentosDisponiveis();
+    const msgs = lerMsgsBlitz();
+
+    // Top 10 quentes pra ligar
+    const top10 = Object.entries(conversas)
+      .filter(([_, c]) => c.status === "ativo" && c.temperatura === "quente")
+      .map(([n, c]) => {
+        const hist = c.historico || [];
+        const ultDele = [...hist].reverse().find(m => m.role === "user");
+        return {
+          numero: n,
+          nome: c.nome || "(sem nome)",
+          ultima_msg: ultDele ? (ultDele.content || "").substring(0, 120) : "(sem msg do paciente)",
+          dias_ult: c.ultimaAtividade ? Math.floor((Date.now() - c.ultimaAtividade) / 86400000) : "?",
+        };
+      })
+      .sort((a, b) => a.dias_ult - b.dias_ult)
+      .slice(0, 10);
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>BLITZ — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+${navbar("", "blitz")}
+<h1 style="font-size:28px;font-weight:800;margin-bottom:6px">⚡ BLITZ — captacao urgente</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">1 clique dispara: broadcast quentes + broadcast mornos + Telegram com resumo + lista top 10 pra ligar.</div>
+
+<div class="card" style="padding:24px;margin-bottom:18px">
+  <div style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:14px">O que vai acontecer agora se voce clicar</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px">
+    <div style="background:rgba(239,68,68,0.15);padding:14px;border-radius:12px;border-left:3px solid #ef4444">
+      <div style="font-size:24px;font-weight:700">${segs.quentes.length}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6)">leads quentes</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px">vao receber msg de vagas urgentes</div>
+    </div>
+    <div style="background:rgba(245,158,11,0.15);padding:14px;border-radius:12px;border-left:3px solid #f59e0b">
+      <div style="font-size:24px;font-weight:700">${segs.mornos.length}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6)">leads mornos</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px">vao receber msg educacional + vagas</div>
+    </div>
+    <div style="background:rgba(124,58,237,0.15);padding:14px;border-radius:12px;border-left:3px solid #7c3aed">
+      <div style="font-size:24px;font-weight:700">${top10.length}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6)">top 10 pra ligar</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px">lista no fim desta pagina</div>
+    </div>
+    <div style="background:rgba(34,197,94,0.15);padding:14px;border-radius:12px;border-left:3px solid #22c55e">
+      <div style="font-size:24px;font-weight:700">${segs.quentes.length + segs.mornos.length}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6)">total disparado</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px">delay 3s entre msgs</div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:14px">Mensagens (editaveis em data/blitz-mensagens.json):</div>
+  <details style="margin-bottom:14px">
+    <summary style="cursor:pointer;font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:8px">Ver mensagem quentes</summary>
+    <div style="font-size:12px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;white-space:pre-wrap;font-family:monospace">${msgs.quentes.replace(/</g,"&lt;")}</div>
+  </details>
+  <details style="margin-bottom:18px">
+    <summary style="cursor:pointer;font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:8px">Ver mensagem mornos</summary>
+    <div style="font-size:12px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;white-space:pre-wrap;font-family:monospace">${msgs.mornos.replace(/</g,"&lt;")}</div>
+  </details>
+
+  <form method="POST" action="/admin/blitz/executar" onsubmit="return confirm('Tem certeza? Vai disparar ${segs.quentes.length + segs.mornos.length} mensagens AGORA.');">
+    <button type="submit" class="btn" style="background:linear-gradient(135deg,#dc2626,#f59e0b);border:none;color:#fff;width:100%;padding:24px;font-size:18px;font-weight:700;justify-content:center;letter-spacing:.5px">⚡ DISPARAR BLITZ AGORA</button>
+  </form>
+</div>
+
+<div class="card" style="padding:20px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:14px">Top 10 pra LIGAR (depois do broadcast)</h2>
+  <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:14px">Ligacao converte 3-5x mais que mensagem. 60 segundos cada. Use: "Aqui e Dr. Ricardo, to abrindo 2 vagas Paciente Modelo essa semana, voce ainda tem interesse?"</div>
+  ${top10.length === 0 ? '<div style="padding:30px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum lead quente ativo no momento.</div>' : top10.map((p, i) => `<div style="display:flex;align-items:center;gap:14px;padding:12px;border-bottom:1px solid rgba(255,255,255,0.06)">
+    <div style="font-size:22px;font-weight:700;color:#ef4444;min-width:30px">${i+1}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600">${p.nome}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.5)">${p.ultima_msg}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:3px">${p.dias_ult} dias atras</div>
+    </div>
+    <a href="tel:+${p.numero}" class="btn" style="background:rgba(34,197,94,0.25);color:#86efac;font-size:12px;padding:8px 14px">📞 ligar</a>
+    <a href="https://wa.me/${p.numero}" target="_blank" class="btn" style="background:rgba(37,211,102,0.25);color:#4ade80;font-size:12px;padding:8px 12px">WA</a>
+  </div>`).join("")}
+</div>
+
+</div></body></html>`);
+  });
+
+  router.post("/blitz/executar", autenticar, (req, res) => {
+    const segs = segmentosDisponiveis();
+    const msgs = lerMsgsBlitz();
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+    const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+    const axiosLib = require("axios");
+
+    // Responde imediato pro doctor saber que comecou
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/><meta http-equiv="refresh" content="2;url=/admin/portal"><title>BLITZ iniciado</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:600px;margin:80px auto;padding:32px;text-align:center">
+  <div style="font-size:48px;margin-bottom:18px">⚡</div>
+  <h1 style="font-size:24px;margin-bottom:14px">BLITZ disparado</h1>
+  <div style="font-size:14px;color:rgba(255,255,255,0.6);margin-bottom:20px">
+    ${segs.quentes.length + segs.mornos.length} mensagens em fila (${Math.round((segs.quentes.length + segs.mornos.length) * 3 / 60)}min). Voce recebe Telegram quando terminar.
+  </div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.4)">Redirecionando pro portal em 2s...</div>
+</div></body></html>`);
+
+    // Dispatch em background
+    (async () => {
+      const inicio = Date.now();
+      let okQuente = 0, falhaQuente = 0, okMorno = 0, falhaMorno = 0;
+
+      // Avisa Telegram que comecou
+      await axiosLib.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        chat_id: tgChat,
+        text: `⚡ BLITZ iniciado\n${segs.quentes.length} quentes + ${segs.mornos.length} mornos = ${segs.quentes.length + segs.mornos.length} mensagens.\nETA: ${Math.round((segs.quentes.length + segs.mornos.length) * 3 / 60)}min.`,
+      }, { timeout: 5000 }).catch(() => {});
+
+      for (const num of segs.quentes) {
+        if (!enviarMensagem) break;
+        try {
+          await enviarMensagem(num, msgs.quentes);
+          okQuente++;
+          if (conversas[num]) {
+            conversas[num].historico = conversas[num].historico || [];
+            conversas[num].historico.push({ role: "assistant", content: msgs.quentes, ts: Date.now(), origem: "blitz" });
+            conversas[num].ultimaAtividade = Date.now();
+            db.salvarConversa(num, conversas[num]).catch(() => {});
+            db.salvarMensagem(num, "assistant", msgs.quentes).catch(() => {});
+          }
+        } catch (e) { falhaQuente++; console.error("[blitz quente]", num, e.message); }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+
+      for (const num of segs.mornos) {
+        if (!enviarMensagem) break;
+        try {
+          await enviarMensagem(num, msgs.mornos);
+          okMorno++;
+          if (conversas[num]) {
+            conversas[num].historico = conversas[num].historico || [];
+            conversas[num].historico.push({ role: "assistant", content: msgs.mornos, ts: Date.now(), origem: "blitz" });
+            conversas[num].ultimaAtividade = Date.now();
+            db.salvarConversa(num, conversas[num]).catch(() => {});
+            db.salvarMensagem(num, "assistant", msgs.mornos).catch(() => {});
+          }
+        } catch (e) { falhaMorno++; console.error("[blitz morno]", num, e.message); }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+
+      const min = Math.round((Date.now() - inicio) / 60000);
+      const resumo = `⚡ BLITZ finalizado em ${min}min\n\nQuentes: ${okQuente} ok / ${falhaQuente} falha\nMornos: ${okMorno} ok / ${falhaMorno} falha\nTotal enviadas: ${okQuente + okMorno}\n\nProximo passo: liga pra top 10 quentes em https://hairtech.org/admin/blitz`;
+      await axiosLib.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        chat_id: tgChat, text: resumo,
+      }, { timeout: 5000 }).catch(() => {});
+    })().catch(e => console.error("[blitz] erro fatal:", e));
   });
 
   // ===== BROADCAST (mensagem em massa segmentada) =====
@@ -2117,6 +2279,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
     } catch (_) {}
 
     const cards = [
+      { href: "/admin/blitz", titulo: "⚡ BLITZ urgente", desc: "1 clique dispara broadcast quentes+mornos + lista top 10 pra ligar — captacao R$16k+ em 14 dias", cor: "#dc2626", icon: "⚡" },
       { href: "/admin", titulo: "Conversas", desc: "Dashboard de leads e atendimentos no WhatsApp", cor: "#7c3aed", icon: "💬" },
       { href: "/admin/kanban", titulo: "Pipeline", desc: "Kanban de oportunidades por status", cor: "#06b6d4", icon: "📊" },
       { href: "/admin/prontuario", titulo: "Prontuario", desc: "Ficha do paciente, anamnese, fotos, conduta", cor: "#ec4899", icon: "🩺" },
