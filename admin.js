@@ -133,6 +133,7 @@ function navbar(senha, ativa) {
   const links = [
     { href: `/admin/portal`, label: "Portal", id: "portal" },
     { href: `/admin/blitz${q}`, label: "⚡ BLITZ", id: "blitz" },
+    { href: `/admin/importar${q}`, label: "Importar", id: "importar" },
     { href: `/admin${q}`, label: "Conversas", id: "dash" },
     { href: `/admin/dashboard${q}`, label: "Dashboard", id: "dashboard" },
     { href: `/admin/kanban${q}`, label: "Pipeline", id: "kanban" },
@@ -1022,6 +1023,168 @@ ${navbar("", "dashboard")}
     options: { responsive: true, plugins: { legend: { display: false } } }
   });
 </script>
+</div></body></html>`);
+  });
+
+  // ===== IMPORTAR contatos (do WhatsApp pessoal do Dr.) =====
+  router.get("/importar", autenticar, (req, res) => {
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Importar leads — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+${navbar("", "importar")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Importar leads do WhatsApp pessoal</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">Cola a lista de contatos que falaram com voce no seu WhatsApp pessoal (5521967813366). Sistema classifica via IA local (sem gastar credito), adiciona ao CRM e inclui no proximo BLITZ.</div>
+
+<div class="card" style="padding:24px;margin-bottom:18px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:12px">Formato aceito (uma linha por contato)</h2>
+  <pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:8px;font-size:12px;color:rgba(255,255,255,0.7);overflow-x:auto;line-height:1.6">+5521987654321 Joao Silva - pediu grupo estetica
++5521912345678 Maria - transplante FUE
++5521911223344 Carlos
+21999887766 Pedro - dermato
+contato 11 98765-4321 Ana</pre>
+
+  <form method="POST" action="/admin/importar">
+    <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Cola aqui (max 200 contatos):</label>
+    <textarea name="lista" rows="14" required style="margin:10px 0 14px;font-family:monospace;font-size:13px" placeholder="Cola a lista um por linha..."></textarea>
+
+    <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Origem (ajuda na classificacao)</label>
+    <select name="origem" style="margin-bottom:14px">
+      <option value="grupo_estetica">Pediu pra entrar em grupo de estetica</option>
+      <option value="whatsapp_pessoal">WhatsApp pessoal geral</option>
+      <option value="indicacao">Indicacao</option>
+      <option value="evento">Evento/feira</option>
+    </select>
+
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:18px">
+      <input type="checkbox" name="incluir_blitz" value="1" checked style="width:auto"/>
+      Marcar essas pessoas como temperatura "morno" pra serem incluidas no proximo BLITZ
+    </label>
+
+    <button type="submit" class="btn" style="background:rgba(34,197,94,0.3);border-color:rgba(34,197,94,0.5);color:#86efac;width:100%;justify-content:center;padding:14px;font-size:15px">Importar contatos</button>
+  </form>
+</div>
+
+<div class="card" style="border-color:rgba(245,158,11,0.4);padding:18px">
+  <div style="font-size:13px;color:#ff9f0a;font-weight:600;margin-bottom:6px">LGPD - consentimento</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.6">
+    Quando alguem te manda mensagem voluntariamente pedindo info (ex: pedir grupo estetica), e consentimento implicito pra voce responder.<br/>
+    A primeira mensagem que voce mandar via AV deve incluir opcao de descadastro ("responda PARAR pra nao receber mais"). O BLITZ ja faz isso automaticamente.
+  </div>
+</div>
+</div></body></html>`);
+  });
+
+  router.post("/importar", autenticar, async (req, res) => {
+    const lista = (req.body?.lista || "").toString();
+    const origem = (req.body?.origem || "whatsapp_pessoal").toString();
+    const incluirBlitz = req.body?.incluir_blitz === "1";
+
+    const linhas = lista.split("\n").map(l => l.trim()).filter(Boolean).slice(0, 200);
+    let processadas = 0, novas = 0, atualizadas = 0, ignoradas = 0;
+    const resultados = [];
+
+    for (const linha of linhas) {
+      // Extrai numero (qualquer sequencia >=10 digitos)
+      const matchNum = linha.match(/(?:\+?55)?\s*\(?(\d{2})\)?\s*9?\s*(\d{4})\s*-?\s*(\d{4})|(\d{10,13})/);
+      let numero = null;
+      if (matchNum) {
+        if (matchNum[4]) {
+          numero = matchNum[4];
+        } else {
+          numero = matchNum[1] + (matchNum[2] || "") + (matchNum[3] || "");
+        }
+        numero = numero.replace(/\D/g, "");
+        // Normaliza pra formato BR: 55 + DDD + 9 + 8 digitos
+        if (numero.length === 10) numero = "55" + numero.slice(0, 2) + "9" + numero.slice(2);
+        else if (numero.length === 11) numero = "55" + numero;
+        else if (numero.length === 12 && !numero.startsWith("55")) numero = "55" + numero.slice(-10);
+        else if (numero.length === 13 && numero.startsWith("55")) {} // ok
+        else if (numero.length < 12 || numero.length > 13) { ignoradas++; continue; }
+      }
+      if (!numero || numero.length < 12) { ignoradas++; continue; }
+
+      // Extrai nome e contexto
+      const semNum = linha.replace(/\+?\d[\d\s\(\)\-]+\d/, "").trim();
+      const [nomePart, ...contextoArr] = semNum.split(/[-–—:]/);
+      const nome = (nomePart || "").trim() || null;
+      const contexto = contextoArr.join(" ").trim();
+
+      // Classificacao via heuristica (sem chamar IA pra economizar)
+      const txt = (nome + " " + contexto).toLowerCase();
+      let temperatura = "morno";
+      let tipo = "novo";
+      if (/(transplante|fue|calvic|implante capilar|enxert|foliculos|coroa|area doadora)/.test(txt)) {
+        temperatura = "quente";
+        tipo = "transplante";
+      } else if (/(mmp|mesoterapia|prp|tratamento capilar|queda|alopecia)/.test(txt)) {
+        temperatura = "morno";
+        tipo = "tratamento_capilar";
+      } else if (/(estetic|botox|preencher|peeling|facial)/.test(txt)) {
+        temperatura = "morno";
+        tipo = "estetica_geral";
+      }
+
+      if (!incluirBlitz) temperatura = "frio";
+
+      // Insere/atualiza
+      if (conversas[numero]) {
+        atualizadas++;
+        if (nome && !conversas[numero].nome) conversas[numero].nome = nome;
+        if (incluirBlitz && conversas[numero].temperatura === "frio") conversas[numero].temperatura = temperatura;
+        conversas[numero].nota = (conversas[numero].nota ? conversas[numero].nota + " | " : "") + `[importado ${new Date().toISOString().slice(0,10)} ${origem}] ${contexto}`;
+        conversas[numero].ultimaAtividade = Date.now();
+      } else {
+        novas++;
+        conversas[numero] = {
+          historico: [],
+          ultimaAtividade: Date.now(),
+          status: "ativo",
+          tipo,
+          retomadas: 0,
+          proximaRetomada: null,
+          temperatura,
+          genero: null,
+          nome,
+          nota: `[importado ${new Date().toISOString().slice(0,10)} ${origem}] ${contexto}`,
+          origem,
+        };
+      }
+      if (db && db.salvarConversa) db.salvarConversa(numero, conversas[numero]).catch(() => {});
+      resultados.push({ numero, nome, temperatura, tipo, novo: !conversas[numero].historico?.length });
+      processadas++;
+    }
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Importacao concluida — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+${navbar("", "importar")}
+<h1 style="font-size:24px;margin-bottom:18px">Importacao concluida</h1>
+<div class="card" style="padding:24px;margin-bottom:18px">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
+    <div><div style="font-size:32px;font-weight:700;color:#34c759">${novas}</div><div style="font-size:11px;color:rgba(255,255,255,0.5)">novas</div></div>
+    <div><div style="font-size:32px;font-weight:700;color:#3b82f6">${atualizadas}</div><div style="font-size:11px;color:rgba(255,255,255,0.5)">atualizadas</div></div>
+    <div><div style="font-size:32px;font-weight:700;color:#f59e0b">${ignoradas}</div><div style="font-size:11px;color:rgba(255,255,255,0.5)">ignoradas (sem numero)</div></div>
+    <div><div style="font-size:32px;font-weight:700;color:#a78bfa">${processadas}</div><div style="font-size:11px;color:rgba(255,255,255,0.5)">total processadas</div></div>
+  </div>
+</div>
+
+<div class="card" style="padding:20px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:14px">Detalhe</h2>
+  ${resultados.length === 0 ? '<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum contato valido encontrado.</div>' : `<table style="font-size:12px"><thead><tr>
+    <th style="padding:8px 12px">Numero</th><th style="padding:8px 12px">Nome</th><th style="padding:8px 12px">Tipo</th><th style="padding:8px 12px">Temperatura</th>
+  </tr></thead><tbody>${resultados.map(r => `<tr class="row">
+    <td style="padding:8px 12px;font-family:monospace">+${r.numero}</td>
+    <td style="padding:8px 12px">${r.nome || "—"}</td>
+    <td style="padding:8px 12px;color:rgba(255,255,255,0.6)">${r.tipo}</td>
+    <td style="padding:8px 12px">${r.temperatura}</td>
+  </tr>`).join("")}</tbody></table>`}
+</div>
+
+<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+  <a href="/admin/blitz" class="btn" style="background:linear-gradient(135deg,#dc2626,#f59e0b);color:#fff;padding:14px 24px;font-weight:600">⚡ Ir pro BLITZ agora</a>
+  <a href="/admin/importar" class="btn" style="background:rgba(255,255,255,0.1)">Importar mais</a>
+  <a href="/admin/portal" class="btn" style="background:rgba(255,255,255,0.1)">← portal</a>
+</div>
 </div></body></html>`);
   });
 
@@ -2280,6 +2443,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
 
     const cards = [
       { href: "/admin/blitz", titulo: "⚡ BLITZ urgente", desc: "1 clique dispara broadcast quentes+mornos + lista top 10 pra ligar — captacao R$16k+ em 14 dias", cor: "#dc2626", icon: "⚡" },
+      { href: "/admin/importar", titulo: "Importar leads", desc: "Cola lista de contatos do WhatsApp pessoal pra entrar no proximo BLITZ", cor: "#22c55e", icon: "📥" },
       { href: "/admin", titulo: "Conversas", desc: "Dashboard de leads e atendimentos no WhatsApp", cor: "#7c3aed", icon: "💬" },
       { href: "/admin/kanban", titulo: "Pipeline", desc: "Kanban de oportunidades por status", cor: "#06b6d4", icon: "📊" },
       { href: "/admin/prontuario", titulo: "Prontuario", desc: "Ficha do paciente, anamnese, fotos, conduta", cor: "#ec4899", icon: "🩺" },
