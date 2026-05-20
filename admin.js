@@ -1026,6 +1026,111 @@ ${navbar("", "dashboard")}
 </div></body></html>`);
   });
 
+  // ===== APRESENTACAO PACIENTE MODELO (PDF printavel) =====
+  // Pagina que vira PDF via Imprimir do browser. Manda pro paciente que respondeu SIM no BLITZ.
+  router.get("/apresentacao-paciente-modelo", (req, res) => {
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Programa Paciente Modelo — Clinica HairTech</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm; }
+  @media print { .no-print{display:none} body{color:#000;background:#fff} }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color:#1a1a2e; max-width:780px; margin:30px auto; padding:0 24px; line-height:1.55; background:#fafafa }
+  .header { background:linear-gradient(135deg,#1a0533,#0d1b4b); color:#fff; padding:30px 28px; border-radius:14px; margin-bottom:24px }
+  .header h1 { font-size:26px; font-weight:800; margin-bottom:4px; letter-spacing:-0.5px }
+  .header .sub { font-size:14px; color:rgba(255,255,255,0.7) }
+  h2 { font-size:18px; color:#5b2c80; margin:24px 0 10px; padding-bottom:6px; border-bottom:2px solid #ec4899 }
+  h3 { font-size:15px; color:#1a1a2e; margin:14px 0 6px }
+  p { margin-bottom:10px; font-size:14px }
+  .badge { display:inline-block; background:#ec4899; color:#fff; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; letter-spacing:.5px; text-transform:uppercase }
+  .box { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:18px 22px; margin:14px 0; box-shadow:0 1px 3px rgba(0,0,0,0.05) }
+  .destaque { background:linear-gradient(135deg,#fef3c7,#fde68a); border-left:4px solid #f59e0b; padding:14px 18px; border-radius:8px; margin:14px 0; font-size:14px }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin:10px 0 }
+  th,td { padding:10px 12px; text-align:left; border-bottom:1px solid #e5e7eb }
+  th { background:#f3f4f6; font-weight:600 }
+  .check { color:#10b981; font-weight:700 }
+  ul { margin-left:22px; margin-bottom:10px }
+  li { margin-bottom:6px; font-size:14px }
+  .cta { background:linear-gradient(135deg,#dc2626,#f59e0b); color:#fff; padding:18px 22px; border-radius:14px; text-align:center; margin:24px 0; font-size:15px; font-weight:600 }
+  .footer { margin-top:30px; padding-top:18px; border-top:1px solid #e5e7eb; font-size:11px; color:#666; text-align:center }
+  .no-print { background:#3b82f6; color:#fff; padding:10px 14px; border-radius:8px; margin-bottom:18px; font-size:13px; text-align:center }
+  .no-print button { background:#fff; color:#3b82f6; border:none; padding:6px 14px; border-radius:6px; font-weight:600; margin-left:10px; cursor:pointer }
+</style></head>
+<body>
+
+<div class="no-print">
+  Pra salvar como PDF: Imprimir (Ctrl/Cmd + P) → Salvar como PDF
+  <button onclick="window.print()">Imprimir agora</button>
+</div>
+
+<div class="header">
+  <div class="badge" style="margin-bottom:10px">Programa Exclusivo · Vagas limitadas</div>
+  <h1>Paciente Modelo</h1>
+  <div class="sub">Transplante Capilar FUE — Clinica HairTech / Dr. Ricardo Meireles Marcelino</div>
+</div>
+
+<h2>O que é o Programa Paciente Modelo</h2>
+<p>O Programa Paciente Modelo é uma <strong>oportunidade exclusiva</strong> de realizar seu transplante FUE com condições especiais em troca de autorização para uso didático das imagens do procedimento (com rosto borrado e identidade preservada).</p>
+
+<p>Vagas extremamente limitadas — abertas apenas em períodos específicos do calendário cirúrgico.</p>
+
+<div class="destaque">
+  <strong>Por que existe esse programa?</strong> A clínica produz material técnico-científico para apresentação em congressos médicos, publicações e formação de outros cirurgiões. Esse material exige documentação fotográfica de qualidade. Em troca, o paciente recebe o procedimento por valor consideravelmente menor que a tabela padrão.
+</div>
+
+<h2>O que está incluso</h2>
+<div class="box">
+  <table>
+    <tr><th style="width:60%">Item</th><th>Detalhe</th></tr>
+    <tr><td><span class="check">✓</span> Cirurgia FUE completa</td><td>Técnica Follicular Unit Extraction conduzida pelo Dr. Ricardo</td></tr>
+    <tr><td><span class="check">✓</span> 6 sessões de MMP pós-operatório</td><td>Microinfusão de medicamentos pra acelerar e potencializar resultado</td></tr>
+    <tr><td><span class="check">✓</span> 12 meses de acompanhamento</td><td>Consultas regulares com Dr. Ricardo até resultado final</td></tr>
+    <tr><td><span class="check">✓</span> Spa Capilar</td><td>Lavagens supervisionadas no pós-imediato pra preservação dos folículos</td></tr>
+    <tr><td><span class="check">✓</span> Material pós-op completo</td><td>Medicação, almofada cervical, kit de cuidados</td></tr>
+    <tr><td><span class="check">✓</span> Foto-documentação</td><td>Para você e pra clínica (com identidade preservada)</td></tr>
+  </table>
+</div>
+
+<h2>Investimento</h2>
+<div class="box" style="text-align:center; padding:24px">
+  <div style="font-size:14px; color:#666; margin-bottom:6px">Programa Paciente Modelo</div>
+  <div style="font-size:42px; font-weight:800; color:#5b2c80; letter-spacing:-1px">R$ 8.000</div>
+  <div style="font-size:14px; color:#666; margin-top:4px">12x sem juros no cartão · R$ 666 por mês</div>
+  <div style="font-size:11px; color:#999; margin-top:10px">Tabela padrão da mesma cirurgia: R$ 10.000 (à vista) / R$ 10.000 12x (com juros)</div>
+</div>
+
+<h2>Termos de exclusividade</h2>
+<ul>
+  <li><strong>Autorização de imagem:</strong> você autoriza, por contrato, a clínica a usar fotos e vídeos da sua evolução (do pré-op ao resultado final de 12 meses) para fins didáticos: congressos, publicações científicas, material de ensino e mídias da clínica.</li>
+  <li><strong>Identidade preservada:</strong> seu rosto é borrado/cortado em todas as imagens que viram material público. Sua identidade NÃO é divulgada.</li>
+  <li><strong>Comparecimento obrigatório:</strong> as 6 sessões MMP e as 4 consultas de acompanhamento (1, 3, 6, 12 meses) são obrigatórias pro programa funcionar. Faltas reduzem qualidade do material e podem implicar em reajuste de valor.</li>
+  <li><strong>Pré-avaliação:</strong> a vaga só é confirmada após análise das fotos iniciais pelo Dr. Ricardo. Nem todo caso é elegível pro programa modelo (depende de qualidade da área doadora, densidade desejada, etc).</li>
+  <li><strong>Sinal:</strong> R$ 150 pra reservar a vaga. Esse valor é descontado do valor total da cirurgia.</li>
+</ul>
+
+<h2>Como reservar</h2>
+<div class="box">
+  <ol style="margin-left:22px">
+    <li>Envie um <strong>SIM</strong> pelo WhatsApp pra confirmar interesse</li>
+    <li>Envie fotos do seu caso conforme orientação que receberá</li>
+    <li>Dr. Ricardo faz pré-avaliação (24-48h)</li>
+    <li>Se elegível, você recebe link Pix de R$ 150 pra reservar vaga</li>
+    <li>Marcamos cirurgia em data disponível</li>
+  </ol>
+</div>
+
+<div class="cta">
+  Vagas limitadas. Quem confirma primeiro, garante.
+</div>
+
+<div class="footer">
+  Clinica HairTech · Dr. Ricardo Meireles Marcelino<br/>
+  CRM-RJ · CNPJ 49.634.881/0001-91 · Niterói/Rio de Janeiro<br/>
+  hairtech.org · +55 21 99354-2383
+</div>
+
+</body></html>`);
+  });
+
   // ===== IMPORTAR contatos (do WhatsApp pessoal do Dr.) =====
   router.get("/importar", autenticar, (req, res) => {
     res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
