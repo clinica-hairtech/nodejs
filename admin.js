@@ -134,6 +134,7 @@ function navbar(senha, ativa) {
     { href: `/admin/portal`, label: "Portal", id: "portal" },
     { href: `/admin/blitz${q}`, label: "⚡ BLITZ", id: "blitz" },
     { href: `/admin/importar${q}`, label: "Importar", id: "importar" },
+    { href: `/admin/system-check${q}`, label: "Check", id: "system-check" },
     { href: `/admin${q}`, label: "Conversas", id: "dash" },
     { href: `/admin/dashboard${q}`, label: "Dashboard", id: "dashboard" },
     { href: `/admin/kanban${q}`, label: "Pipeline", id: "kanban" },
@@ -1023,6 +1024,99 @@ ${navbar("", "dashboard")}
     options: { responsive: true, plugins: { legend: { display: false } } }
   });
 </script>
+</div></body></html>`);
+  });
+
+  // ===== SYSTEM CHECK (verificacao rapida pre-BLITZ) =====
+  router.get("/system-check", autenticar, async (req, res) => {
+    const checks = [];
+
+    // 1. Database
+    try {
+      if (db.pool) {
+        await db.pool.query("SELECT 1");
+        checks.push({ ok: true, item: "Postgres conectado", det: "DATABASE_URL responde" });
+      } else { checks.push({ ok: false, item: "Postgres", det: "DATABASE_URL nao configurado" }); }
+    } catch (e) { checks.push({ ok: false, item: "Postgres", det: e.message }); }
+
+    // 2. WHATSAPP_TOKEN
+    const hasToken = Boolean(process.env.WHATSAPP_TOKEN && process.env.PHONE_NUMBER_ID);
+    checks.push({ ok: hasToken, item: "WhatsApp Cloud API", det: hasToken ? "Token e Phone ID presentes" : "WHATSAPP_TOKEN ou PHONE_NUMBER_ID ausentes - BLITZ nao envia" });
+
+    // 3. Test WHATSAPP token actually works
+    if (hasToken) {
+      try {
+        const r = await require("axios").get(
+          `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}`,
+          { headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` }, timeout: 8000, validateStatus: () => true }
+        );
+        if (r.status === 200) checks.push({ ok: true, item: "WhatsApp Token valido", det: `Numero: ${r.data.display_phone_number}` });
+        else checks.push({ ok: false, item: "WhatsApp Token", det: `HTTP ${r.status} - token pode ter expirado` });
+      } catch (e) { checks.push({ ok: false, item: "WhatsApp Token", det: e.message }); }
+    }
+
+    // 4. Total de conversas
+    const totConv = Object.keys(conversas).length;
+    const quentes = Object.values(conversas).filter(c => c.status === "ativo" && c.temperatura === "quente").length;
+    const mornos = Object.values(conversas).filter(c => c.status === "ativo" && c.temperatura === "morno").length;
+    checks.push({ ok: totConv > 0, item: "Base de leads", det: `${totConv} conversas total · ${quentes} quentes ativos · ${mornos} mornos ativos` });
+
+    // 5. AI fallback
+    const hasAI = Boolean(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.OLLAMA_ENABLED);
+    checks.push({ ok: hasAI, item: "IA disponivel", det: process.env.OLLAMA_ENABLED ? "Ollama local + fallback cloud" : (process.env.GEMINI_API_KEY ? "Gemini + OpenAI fallback" : process.env.OPENAI_API_KEY ? "OpenAI" : "Nenhuma key configurada") });
+
+    // 6. BLITZ messages OK
+    let blitzOk = false;
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(__dirname, "data", "blitz-mensagens.json"), "utf8"));
+      blitzOk = Boolean(m.quentes && m.mornos);
+    } catch (_) {}
+    checks.push({ ok: blitzOk, item: "Mensagens BLITZ", det: blitzOk ? "data/blitz-mensagens.json valido" : "Mensagens nao carregaram" });
+
+    // 7. Apresentacao publica
+    checks.push({ ok: true, item: "Apresentacao Paciente Modelo", det: "https://hairtech.org/admin/apresentacao-paciente-modelo" });
+
+    // 8. Telegram bot configurado
+    const hasTG = Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
+    checks.push({ ok: hasTG, item: "Telegram bot", det: hasTG ? "@HairTechBot configurado" : "TELEGRAM_BOT_TOKEN ou CHAT_ID ausentes" });
+
+    const passou = checks.filter(c => c.ok).length;
+    const total = checks.length;
+    const pct = Math.round((passou / total) * 100);
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>System Check — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:780px;margin:0 auto;padding:32px 24px">
+${navbar("", "system-check")}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+  <h1 style="font-size:24px;font-weight:700">System check</h1>
+  <div style="font-size:36px;font-weight:800;color:${pct>=85?'#22c55e':pct>=60?'#f59e0b':'#ef4444'}">${pct}%</div>
+</div>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">${passou} de ${total} OK. Atualize a pagina pra rodar de novo.</div>
+
+<div class="card">
+${checks.map(c => `<div style="display:flex;align-items:start;gap:14px;padding:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+  <div style="font-size:22px;color:${c.ok?'#22c55e':'#ef4444'};min-width:30px">${c.ok?'✓':'✗'}</div>
+  <div style="flex:1">
+    <div style="font-size:15px;font-weight:500">${c.item}</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.55);margin-top:3px;font-family:monospace">${c.det}</div>
+  </div>
+</div>`).join("")}
+</div>
+
+${pct >= 85 ? `<div class="card" style="margin-top:18px;background:linear-gradient(135deg,#10b98122,#22c55e22);border-color:rgba(34,197,94,0.4)">
+  <div style="font-size:14px;color:#22c55e;font-weight:700;margin-bottom:6px">✓ Tudo pronto pro BLITZ</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.75);line-height:1.6">
+    Sistema OK. Voce pode disparar o BLITZ com seguranca.<br/>
+    Proximo passo: <a href="/admin/blitz" style="color:#86efac;font-weight:600">⚡ Ir pro BLITZ</a>
+  </div>
+</div>` : `<div class="card" style="margin-top:18px;border-color:rgba(239,68,68,0.4)">
+  <div style="font-size:14px;color:#ef4444;font-weight:700;margin-bottom:6px">⚠ Sistema com pendencias</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.75);line-height:1.6">
+    Resolva os itens vermelhos antes de disparar BLITZ. Se algum item nao se resolve em 5min, me avise.
+  </div>
+</div>`}
+
 </div></body></html>`);
   });
 
