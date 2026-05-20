@@ -441,6 +441,8 @@ app.post("/webhook", async (req, res) => {
       if (tipo === "FOTO_CABELO") {
         encaminharFotoParaClinica(from, imageId).catch(e => console.error("Erro ao encaminhar foto:", e.message));
         c.aguardandoAvaliacao = true;
+        // P1 explicito: foto pra avaliacao chegou
+        notificarClinica(from, "Fotos de avaliação capilar recebidas (P1)", "P1").catch(() => {});
       }
     } else if (message.type === "audio" || message.type === "voice") userMessage = "[O paciente enviou um áudio]";
     else if (message.type === "document") userMessage = "[O paciente enviou um documento]";
