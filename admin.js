@@ -136,6 +136,7 @@ function navbar(senha, ativa) {
     { href: `/admin/importar${q}`, label: "Importar", id: "importar" },
     { href: `/admin/system-check${q}`, label: "Check", id: "system-check" },
     { href: `/admin/dual-ai${q}`, label: "🤖+🤖", id: "dual-ai" },
+    { href: `/admin/auto-cadastro${q}`, label: "Auto-cadastro", id: "auto-cadastro" },
     { href: `/admin${q}`, label: "Conversas", id: "dash" },
     { href: `/admin/dashboard${q}`, label: "Dashboard", id: "dashboard" },
     { href: `/admin/kanban${q}`, label: "Pipeline", id: "kanban" },
@@ -1026,6 +1027,117 @@ ${navbar("", "dashboard")}
   });
 </script>
 </div></body></html>`);
+  });
+
+  // ===== AUTO-CADASTRO (Anthropic Computer Use) =====
+  // Claude opera browser virtual da Anthropic pra cadastrar em servicos externos.
+  // Limitacoes: CAPTCHA -> handoff humano. Email verification: nesta versao Dr.
+  // tem que clicar no link. Versao futura usa Gmail MCP pra auto-verificar.
+  router.get("/auto-cadastro", autenticar, (req, res) => {
+    const acu = (() => { try { return require("./integrations/anthropic-computer-use"); } catch (_) { return null; } })();
+    const st = acu ? acu.status() : { configurado: false };
+
+    const servicos = [
+      { id: "backblaze", nome: "Backblaze B2 (backup)", url: "https://www.backblaze.com/b2/sign-up.html", cartao: false, custo: "Grátis até 10GB" },
+      { id: "memed", nome: "Memed (prescrição)", url: "https://memed.com.br/integracao", cartao: false, custo: "Grátis pra médico" },
+      { id: "cfm-prescricao", nome: "Solicitar credenciais CFM Prescrição", url: "https://sistemas.cfm.org.br/contatoprescricaoeletronica/br", cartao: false, custo: "R$ 0" },
+      { id: "focusnfe", nome: "FocusNFe (NFS-e)", url: "https://focusnfe.com.br", cartao: true, custo: "R$ 0,15-0,40/nota (mín. R$ 30 pré-pago)" },
+    ];
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Auto-cadastro — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+${navbar("", "auto-cadastro")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Auto-cadastro via Anthropic Computer Use</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px">Claude opera browser virtual na sandbox da Anthropic pra fazer cadastro em servicos. Limitacoes: CAPTCHA = handoff humano. Email de verificacao: voce clica no link.</div>
+
+<div class="card" style="margin-bottom:16px;padding:14px;border-left:3px solid ${st.configurado?'#22c55e':'#ef4444'}">
+  <div style="font-size:12px;color:rgba(255,255,255,0.5)">Status:</div>
+  <div style="font-size:13px;color:${st.configurado?'#86efac':'#fca5a5'};font-weight:600">${st.configurado?'OK - ANTHROPIC_API_KEY presente':'AUSENTE - falta ANTHROPIC_API_KEY no .env do AV'}</div>
+  ${!st.configurado ? '<div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:6px">Adicionar: <code>ANTHROPIC_API_KEY=sk-ant-...</code> em /home/user/nodejs/.env</div>' : ''}
+</div>
+
+<div class="card" style="margin-bottom:16px;padding:14px;border-left:3px solid #f59e0b">
+  <div style="font-size:12px;color:#f59e0b;font-weight:600;margin-bottom:4px">⚠ Beta / Custo</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.5">
+    Computer Use API e beta. Cada cadastro consome ~50-200k tokens (R\$0.50-3 por tentativa). Pode falhar em sites com CAPTCHA. <strong>Use com criterio.</strong>
+  </div>
+</div>
+
+<h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin:24px 0 12px">Servicos disponiveis</h2>
+
+${servicos.map(s => `<div class="card" style="margin-bottom:10px;padding:16px">
+  <div style="display:flex;justify-content:space-between;align-items:start;gap:14px;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+      <div style="font-weight:600;font-size:15px">${s.nome}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:3px">${s.custo}${s.cartao ? ' · <strong style="color:#f59e0b">precisa cartao</strong>' : ''}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:6px;font-family:monospace">${s.url}</div>
+    </div>
+    <form method="POST" action="/admin/auto-cadastro/${s.id}/executar" style="display:flex;gap:8px;align-items:center">
+      <a href="${s.url}" target="_blank" class="btn" style="background:rgba(255,255,255,0.08);font-size:12px;padding:8px 14px">Manual</a>
+      <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#c4b5fd;font-size:12px;padding:8px 14px" ${!st.configurado?'disabled':''}>🤖 Auto</button>
+    </form>
+  </div>
+</div>`).join("")}
+
+<div style="margin-top:24px;font-size:11px;color:rgba(255,255,255,0.4);line-height:1.6">
+  <strong>Como funciona auto-cadastro:</strong><br/>
+  1. Voce clica "Auto" no servico<br/>
+  2. Sistema chama Anthropic Computer Use API com tarefa "cadastre em X usando email Y senha Z"<br/>
+  3. Claude opera browser virtual deles (Linux + Firefox)<br/>
+  4. Apos cadastro, voce recebe Telegram com status<br/>
+  5. Se houver email de verificacao, voce clica no seu Gmail<br/>
+  6. Em uma versao futura, sistema le seu Gmail via MCP e clica sozinho
+</div>
+
+</div></body></html>`);
+  });
+
+  router.post("/auto-cadastro/:servico/executar", autenticar, async (req, res) => {
+    const servico = req.params.servico;
+    const acu = (() => { try { return require("./integrations/anthropic-computer-use"); } catch (_) { return null; } })();
+    if (!acu || !acu.configured()) {
+      return res.send(`<div style="padding:40px;color:#ef4444;font-family:sans-serif">ANTHROPIC_API_KEY ausente. Adicione no .env do AV.</div>`);
+    }
+
+    const tarefas = {
+      backblaze: `Acesse https://www.backblaze.com/b2/sign-up.html. Preencha cadastro com email rmeireles87@gmail.com e crie senha forte aleatoria. Submita o formulario. NAO clique link de email - apos preencher e enviar formulario, termine retornando DONE: aguardando email de verificacao em rmeireles87@gmail.com.`,
+      memed: `Acesse https://memed.com.br/integracao e clique em criar conta de medico. Preencha com nome Ricardo Meireles Marcelino, email rmeireles87@gmail.com, e termine no passo onde pede CRM. Termine retornando DONE: chegou em passo de CRM, Dr. precisa preencher.`,
+      "cfm-prescricao": `Acesse https://sistemas.cfm.org.br/contatoprescricaoeletronica/br e preencha formulario de solicitacao de credenciais com nome Ricardo Meireles Marcelino, email rmeireles87@gmail.com, finalidade integracao com sistema proprio HairTech. Submita.`,
+      focusnfe: `Acesse https://focusnfe.com.br e clique em Comecar / Cadastre-se. Preencha email rmeireles87@gmail.com. Pare antes do cartao - termine com DONE: chegou em passo de pagamento, Dr. precisa fornecer cartao.`,
+    };
+
+    const tarefa = tarefas[servico];
+    if (!tarefa) return res.status(400).send("servico desconhecido");
+
+    // Resposta imediata pro Dr.
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/><meta http-equiv="refresh" content="3;url=/admin/auto-cadastro"><title>Auto-cadastro iniciado</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:600px;margin:80px auto;padding:32px;text-align:center">
+  <div style="font-size:48px;margin-bottom:18px">🤖</div>
+  <h1 style="font-size:24px;margin-bottom:14px">Auto-cadastro ${servico} iniciado</h1>
+  <div style="font-size:14px;color:rgba(255,255,255,0.6)">Claude esta operando browser virtual. Voce recebe Telegram em ~30s-3min com resultado.</div>
+</div></body></html>`);
+
+    // Executa em background
+    (async () => {
+      const inicio = Date.now();
+      const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+      const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+      const axiosLib = require("axios");
+
+      try {
+        const result = await acu.executarTarefa(tarefa, { maxIter: 20 });
+        const segs = Math.round((Date.now() - inicio) / 1000);
+        const msg = `🤖 Auto-cadastro ${servico} (${segs}s)\n\n${result.ok ? '✅' : '❌'} ${result.ok ? 'Sucesso' : 'Falhou'}\n\n${result.mensagem || result.erro || '(sem detalhe)'}\n\nAcoes executadas: ${result.acoes?.length || 0}\nIteracoes: ${result.iteracoes}`;
+        await axiosLib.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+          chat_id: tgChat, text: msg.slice(0, 4000),
+        }, { timeout: 5000 }).catch(() => {});
+      } catch (e) {
+        await axiosLib.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+          chat_id: tgChat, text: `❌ Auto-cadastro ${servico} crashou: ${e.message}`,
+        }, { timeout: 5000 }).catch(() => {});
+      }
+    })().catch(e => console.error("[auto-cadastro]", e));
   });
 
   // ===== DUAL-AI CONSULT (Claude + ChatGPT em paralelo + sintese) =====
@@ -2731,6 +2843,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/agenda-link", titulo: "Sincronizar celular", desc: "Conecta agenda HairTech ao Apple/Google Calendar do seu telefone", cor: "#06b6d4", icon: "📲" },
       { href: "/admin/dashboard", titulo: "Dashboard executivo", desc: "Graficos de leads, receita, agendamentos (Chart.js)", cor: "#8b5cf6", icon: "📈" },
       { href: "/admin/dual-ai", titulo: "Claude + ChatGPT", desc: "Consulta os 2 modelos em paralelo + sintese pra decisoes criticas (CFM, copy, LGPD)", cor: "#a855f7", icon: "🤖" },
+      { href: "/admin/auto-cadastro", titulo: "Auto-cadastro", desc: "Claude opera browser virtual da Anthropic pra cadastrar em servicos sem voce digitar (beta)", cor: "#7c3aed", icon: "🚀" },
       { href: "/admin/templates", titulo: "Templates", desc: "Mensagens prontas pra copiar e colar (12 templates pre-configurados)", cor: "#f97316", icon: "✂" },
       { href: "/admin/broadcast", titulo: "Broadcast", desc: "Mensagem em massa segmentada (quentes/mornos/inativos/todos)", cor: "#e11d48", icon: "📢" },
       { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋", badge: contadores.vencimentos },
