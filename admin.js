@@ -135,6 +135,7 @@ function navbar(senha, ativa) {
     { href: `/admin/blitz${q}`, label: "⚡ BLITZ", id: "blitz" },
     { href: `/admin/importar${q}`, label: "Importar", id: "importar" },
     { href: `/admin/system-check${q}`, label: "Check", id: "system-check" },
+    { href: `/admin/dual-ai${q}`, label: "🤖+🤖", id: "dual-ai" },
     { href: `/admin${q}`, label: "Conversas", id: "dash" },
     { href: `/admin/dashboard${q}`, label: "Dashboard", id: "dashboard" },
     { href: `/admin/kanban${q}`, label: "Pipeline", id: "kanban" },
@@ -1024,6 +1025,82 @@ ${navbar("", "dashboard")}
     options: { responsive: true, plugins: { legend: { display: false } } }
   });
 </script>
+</div></body></html>`);
+  });
+
+  // ===== DUAL-AI CONSULT (Claude + ChatGPT em paralelo + sintese) =====
+  router.get("/dual-ai", autenticar, (req, res) => {
+    const dualAI = (() => { try { return require("./integrations/dual-ai"); } catch (_) { return null; } })();
+    const st = dualAI ? dualAI.status() : { claude_configurado: false, chatgpt_configurado: false };
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dual-AI consult — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+${navbar("", "dual-ai")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Dual-AI consult</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px">Pergunta vai pra Claude (Anthropic) + ChatGPT (OpenAI) em paralelo. Depois um sintetizador analisa convergencia/divergencia e da recomendacao pratica. Pra decisoes criticas (copy de venda, conduta etica, CFM, mensagem juridica).</div>
+
+<div class="card" style="margin-bottom:18px;padding:16px">
+  <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:6px">Status</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.75);font-family:monospace">
+    Claude (Anthropic): <strong style="color:${st.claude_configurado?'#22c55e':'#ef4444'}">${st.claude_configurado?'OK':'AUSENTE - falta ANTHROPIC_API_KEY no .env'}</strong><br/>
+    ChatGPT (OpenAI): <strong style="color:${st.chatgpt_configurado?'#22c55e':'#ef4444'}">${st.chatgpt_configurado?'OK':'AUSENTE - falta OPENAI_API_KEY no .env'}</strong><br/>
+    ChatGPT Web Search: <strong style="color:${st.chatgpt_web_search?'#22c55e':'#8e8e93'}">${st.chatgpt_web_search?'ATIVO (CHATGPT_USE_WEB_SEARCH=1)':'DESATIVADO'}</strong>
+  </div>
+</div>
+
+<form method="POST" action="/admin/dual-ai" class="card" style="padding:20px">
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Contexto opcional (background pra IA entender)</label>
+  <textarea name="contexto" rows="3" placeholder="Ex: Sou medico tricologista, vou enviar essa mensagem a paciente que reclamou de resultado..." style="margin:8px 0 14px;font-size:13px"></textarea>
+
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Pergunta / texto pra analisar</label>
+  <textarea name="pergunta" rows="6" required placeholder="Ex: A mensagem abaixo passa no CFM 2.336/2023? Pode haver risco LGPD? ..." style="margin:8px 0 16px;font-size:13px"></textarea>
+
+  <button type="submit" class="btn" style="background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;width:100%;padding:14px;font-size:14px;font-weight:600;justify-content:center">🤖+🤖 Consultar Claude + ChatGPT</button>
+</form>
+</div></body></html>`);
+  });
+
+  router.post("/dual-ai", autenticar, async (req, res) => {
+    const pergunta = (req.body?.pergunta || "").toString();
+    const contexto = (req.body?.contexto || "").toString();
+    if (!pergunta) return res.redirect("/admin/dual-ai");
+    let resultado;
+    try {
+      const dualAI = require("./integrations/dual-ai");
+      resultado = await dualAI.consultar(pergunta, contexto);
+    } catch (e) {
+      return res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body style="background:#1a0533;color:#fff;font-family:sans-serif;padding:32px"><h1>Erro</h1><pre>${e.message}</pre><a href="/admin/dual-ai" style="color:#a78bfa">← voltar</a></body></html>`);
+    }
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Resultado dual-AI — HairTech</title><style>${CSS_BASE}.col h3{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:10px}.txt{white-space:pre-wrap;font-size:13px;line-height:1.6;color:rgba(255,255,255,0.85)}</style></head>
+<body><div style="max-width:1280px;margin:0 auto;padding:32px 24px">
+${navbar("", "dual-ai")}
+<h1 style="font-size:22px;margin-bottom:16px">Resultado</h1>
+<div class="card" style="margin-bottom:18px;padding:16px;border-left:3px solid #8b5cf6">
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px">PERGUNTA</div>
+  <div style="font-size:14px;white-space:pre-wrap">${pergunta.replace(/</g,"&lt;")}</div>
+</div>
+
+<div class="card" style="margin-bottom:18px;padding:20px;background:linear-gradient(135deg,#22c55e15,#10b98115);border-color:rgba(34,197,94,0.4)">
+  <h3 style="font-size:14px;font-weight:700;color:#22c55e;margin-bottom:10px">🧠 SINTESE / RECOMENDACAO</h3>
+  <div class="txt">${(resultado.sintese||"").replace(/</g,"&lt;")}</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px">
+  <div class="card col" style="padding:18px">
+    <h3>Claude (Anthropic) <span style="font-size:10px;color:rgba(255,255,255,0.4);font-weight:400">${resultado.claude.modelo||""}</span></h3>
+    <div class="txt">${(resultado.claude.texto||resultado.claude.erro||"(falhou)").replace(/</g,"&lt;")}</div>
+  </div>
+  <div class="card col" style="padding:18px">
+    <h3>ChatGPT (OpenAI) <span style="font-size:10px;color:rgba(255,255,255,0.4);font-weight:400">${resultado.chatgpt.modelo||""}</span></h3>
+    <div class="txt">${(resultado.chatgpt.texto||resultado.chatgpt.erro||"(falhou)").replace(/</g,"&lt;")}</div>
+  </div>
+</div>
+
+<div style="margin-top:18px;display:flex;gap:10px">
+  <a class="btn" href="/admin/dual-ai" style="background:rgba(255,255,255,0.1)">Nova consulta</a>
+  <a class="btn" href="/admin/portal" style="background:rgba(255,255,255,0.1)">← portal</a>
+</div>
 </div></body></html>`);
   });
 
@@ -2653,6 +2730,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin/agendamentos", titulo: "Agenda", desc: "Consultas e procedimentos dos proximos 60 dias", cor: "#3b82f6", icon: "📅" },
       { href: "/admin/agenda-link", titulo: "Sincronizar celular", desc: "Conecta agenda HairTech ao Apple/Google Calendar do seu telefone", cor: "#06b6d4", icon: "📲" },
       { href: "/admin/dashboard", titulo: "Dashboard executivo", desc: "Graficos de leads, receita, agendamentos (Chart.js)", cor: "#8b5cf6", icon: "📈" },
+      { href: "/admin/dual-ai", titulo: "Claude + ChatGPT", desc: "Consulta os 2 modelos em paralelo + sintese pra decisoes criticas (CFM, copy, LGPD)", cor: "#a855f7", icon: "🤖" },
       { href: "/admin/templates", titulo: "Templates", desc: "Mensagens prontas pra copiar e colar (12 templates pre-configurados)", cor: "#f97316", icon: "✂" },
       { href: "/admin/broadcast", titulo: "Broadcast", desc: "Mensagem em massa segmentada (quentes/mornos/inativos/todos)", cor: "#e11d48", icon: "📢" },
       { href: "/admin/compliance", titulo: "Compliance", desc: "Vencimentos de VPS, dominio, alvara, anuidade - alerta semanal", cor: "#facc15", icon: "📋", badge: contadores.vencimentos },
