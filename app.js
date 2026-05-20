@@ -354,8 +354,8 @@ async function processarComando(texto) {
 
 function classificarLead(texto) {
   const t = texto.toLowerCase();
-  if (/(quero agendar|quero marcar|vou fazer|quero fazer|confirmar|pagar|fechar|marcar consulta|agendar agora)/.test(t)) return "quente";
-  if (/(transplante|calvic|quanto custa|qual o valor|valor da|custo|consulta|tratamento|interesse|gostaria|queda|cabelo|alopecia|mmp|falha|entrad)/.test(t)) return "morno";
+  if (/(quero agendar|quero marcar|vou fazer|quero fazer|confirmar|pagar|fechar|marcar consulta|agendar agora|paciente modelo)/.test(t)) return "quente";
+  if (/(transplante|calvic|quanto custa|qual o valor|valor da|custo|consulta|tratamento|interesse|gostaria|queda|cabelo|alopecia|mmp|falha|entrad|coroa|area doadora|enxert|foliculos|implante capilar|fue\b|cirurgia capilar)/.test(t)) return "morno";
   return "frio";
 }
 
@@ -407,6 +407,15 @@ app.post("/webhook", async (req, res) => {
     }
     await enviarDisclosureSeNovo(from);
     const c = conversas[from];
+
+    // LGPD opt-out: PARAR/DESCADASTRAR/SAIR/REMOVER -> anonimiza e para de mandar
+    if (message.type === "text") {
+      const t = (message.text.body || "").trim().toLowerCase();
+      if (/^(parar|descadastrar|cancelar|sair|remover|stop|opt.?out)\b/.test(t)) {
+        await tratarOptOut(from, message.text.body);
+        return;
+      }
+    }
 
     // P0: detecta caso clinico/juridico/posop ANTES de chamar IA.
     // Se P0: pausa bot, manda mensagem segura, alerta Dr. imediato. NUNCA deixa IA responder.
@@ -485,7 +494,7 @@ async function analisarImagem(imageId) {
 async function processarResposta(from, resposta) {
   if (resposta.includes("[BOTAO_ESPECIALISTA]")) {
     const antesRaw = resposta.split("[BOTAO_ESPECIALISTA]")[0];
-    const antes = antesRaw.replace(/\[NOTIF_AGENDAMENTO\]/g, "").replace(/\[NOTIF_TRANSPLANTE\]/g, "").replace(/\[PDF_FOTOS_M\]/g, "").replace(/\[PDF_FOTOS_F\]/g, "").replace(/\[PDF_FOTOS\]/g, "").replace(/\[HUMANO\]/g, "").trim();
+    const antes = antesRaw.replace(/\[NOTIF_AGENDAMENTO\]/g, "").replace(/\[NOTIF_TRANSPLANTE\]/g, "").replace(/\[NOTIF_PAC_MODELO\]/g, "").replace(/\[NOTIF_FOTOS\]/g, "").replace(/\[HANDOFF_ANA\]/g, "").replace(/\[PDF_FOTOS_M\]/g, "").replace(/\[PDF_FOTOS_F\]/g, "").replace(/\[PDF_FOTOS\]/g, "").replace(/\[HUMANO\]/g, "").trim();
     if (antes) await enviarMensagem(from, antes);
     if (!antes.includes("49634881000191")) {
       await new Promise(r => setTimeout(r, 400));
@@ -508,13 +517,23 @@ async function processarResposta(from, resposta) {
     await enviarMenuInicial(from);
     return;
   }
-  if (resposta.includes("[NOTIF_AGENDAMENTO]")) await notificarClinica(from, "Paciente confirmou interesse em agendar — aguardando Pix R$150.");
-  if (resposta.includes("[NOTIF_TRANSPLANTE]")) await notificarClinica(from, "Paciente com interesse em transplante capilar");
+  // P2: agendamento confirmado, dúvida operacional
+  if (resposta.includes("[NOTIF_AGENDAMENTO]")) await notificarClinica(from, "Paciente confirmou interesse em agendar — aguardando Pix R$150.", "P2");
+  // P1: interesse forte em transplante (cirurgia = ticket alto)
+  if (resposta.includes("[NOTIF_TRANSPLANTE]")) await notificarClinica(from, "Paciente com interesse em transplante capilar", "P1");
+  // P1: paciente modelo (programa premium)
+  if (resposta.includes("[NOTIF_PAC_MODELO]")) await notificarClinica(from, "Paciente quer Programa Paciente Modelo (R$8k)", "P1");
+  // P1: fotos chegaram pra avaliação
+  if (resposta.includes("[NOTIF_FOTOS]")) await notificarClinica(from, "Fotos de avaliação capilar recebidas", "P1");
+  // Handoff estruturado AV -> ANA (vendas complexas)
+  if (resposta.includes("[HANDOFF_ANA]")) {
+    await handoffParaAna(from, "AV detectou venda complexa - ANA assume", "Bot sinalizou via prompt");
+  }
   if (resposta.includes("[HUMANO]")) { conversas[from].status = "humano"; conversas[from].proximaRetomada = null; }
   const enviarFotoM = resposta.includes("[PDF_FOTOS_M]");
   const enviarFotoF = resposta.includes("[PDF_FOTOS_F]");
   const enviarPdf = resposta.includes("[PDF_FOTOS]");
-  const limpa = resposta.replace(/\[NOTIF_AGENDAMENTO\]/g, "").replace(/\[NOTIF_TRANSPLANTE\]/g, "").replace(/\[PDF_FOTOS_M\]/g, "").replace(/\[PDF_FOTOS_F\]/g, "").replace(/\[PDF_FOTOS\]/g, "").replace(/\[HUMANO\]/g, "").trim();
+  const limpa = resposta.replace(/\[NOTIF_AGENDAMENTO\]/g, "").replace(/\[NOTIF_TRANSPLANTE\]/g, "").replace(/\[NOTIF_PAC_MODELO\]/g, "").replace(/\[NOTIF_FOTOS\]/g, "").replace(/\[HANDOFF_ANA\]/g, "").replace(/\[PDF_FOTOS_M\]/g, "").replace(/\[PDF_FOTOS_F\]/g, "").replace(/\[PDF_FOTOS\]/g, "").replace(/\[HUMANO\]/g, "").trim();
   const partes = dividirMensagem(limpa);
   for (const parte of partes) { await enviarMensagem(from, parte); if (partes.length > 1) await new Promise(r => setTimeout(r, 700)); }
   if (enviarPdf || enviarFotoM || enviarFotoF) {
@@ -717,6 +736,80 @@ async function tratarP0(from, p0, textoOriginal) {
   } catch (e) { console.error("[P0] Telegram falhou:", e.message); }
 
   console.log(`[P0] ${p0.prioridade} ${p0.tipo} acionado para ${from}`);
+}
+
+// Handoff estruturado AV -> ANA: AV detecta venda complexa e poe em fila pra ANA assumir.
+// Em vez de "passar manualmente", grava em handoff-queue.json com payload completo.
+async function handoffParaAna(from, motivo, contextoExtra) {
+  const c = conversas[from] || {};
+  const hist = (c.historico || []).slice(-10);
+  const ultimasMsgs = hist.map(m => `[${m.role}] ${(m.content||"").substring(0,200)}`).join("\n");
+  const fs = require("fs");
+  const path = require("path");
+  const crypto = require("crypto");
+  const filaPath = path.join(__dirname, "handoff-queue.json");
+  let fila = [];
+  try { fila = JSON.parse(fs.readFileSync(filaPath, "utf8")); if (!Array.isArray(fila)) fila = []; } catch (_) {}
+  fila.push({
+    id: crypto.randomBytes(8).toString("hex"),
+    agente: "AV->ANA",
+    titulo: `Handoff: ${motivo}`,
+    descricao: `Paciente: ${c.nome || from} (+${from})\nTemperatura: ${c.temperatura}\nTipo: ${c.tipo}\n\nUltimas mensagens:\n${ultimasMsgs}\n\nContexto extra:\n${contextoExtra || "(nenhum)"}`,
+    url: `https://hairtech.org/admin/conversa/${from}`,
+    numero_paciente: from,
+    nome_paciente: c.nome,
+    motivo,
+    criado_em: new Date().toISOString(),
+    status: "pendente",
+  });
+  fs.writeFileSync(filaPath, JSON.stringify(fila.slice(-50), null, 2));
+
+  // Telegram informa Dr.
+  try {
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+    const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+    await axios.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+      chat_id: tgChat,
+      text: `Handoff AV->ANA\nPaciente: ${c.nome || from}\nMotivo: ${motivo}\n\nResolver: https://hairtech.org/admin/handoff`,
+    }, { timeout: 5000 });
+  } catch (_) {}
+
+  console.log(`[handoff AV->ANA] ${from}: ${motivo}`);
+}
+
+// LGPD opt-out: paciente respondeu PARAR/etc. Status vira excluido_lgpd,
+// historico zerado (mantem nome como [EXCLUIDO LGPD]), bot nunca mais envia.
+async function tratarOptOut(from, textoOriginal) {
+  console.log(`[OPT-OUT] ${from}: ${textoOriginal}`);
+  const c = conversas[from] || (conversas[from] = { historico: [], ultimaAtividade: Date.now(), status: "ativo" });
+  c.historico = c.historico || [];
+  c.historico.push({ role: "user", content: textoOriginal, ts: Date.now() });
+
+  try {
+    await enviarMensagem(from, "Recebido. Voce foi removido da nossa lista de contatos. Nao enviaremos mais mensagens. Para informacoes futuras, entre em contato voluntariamente. Seus dados sao tratados conforme LGPD (dpo@hairtech.org).");
+  } catch (e) { console.error("[opt-out] falha enviando confirmacao:", e.message); }
+
+  c.status = "excluido_lgpd";
+  c.proximaRetomada = null;
+  c.opt_out_em = new Date().toISOString();
+  c.nome_anterior = c.nome;
+  c.nome = "[EXCLUIDO LGPD]";
+  c.historico = [];
+
+  if (db && db.salvarConversa) db.salvarConversa(from, c).catch(() => {});
+  if (db && db.pool) {
+    db.pool.query("UPDATE conversations SET historico='[]', nome='[EXCLUIDO LGPD]', status='excluido_lgpd' WHERE numero=$1", [from]).catch(() => {});
+    db.pool.query("DELETE FROM mensagens WHERE wa_id=$1", [from]).catch(() => {});
+  }
+
+  // Telegram informa Dr. (transparencia, nao alerta urgente)
+  try {
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+    const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+    await axios.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+      chat_id: tgChat, text: `LGPD opt-out: +${from} pediu pra parar. Dados anonimizados, historico zerado.`,
+    }, { timeout: 5000 });
+  } catch (_) {}
 }
 
 async function notificarClinica(numeroPaciente, motivo, prioridade) {
