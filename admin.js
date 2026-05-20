@@ -134,6 +134,7 @@ function navbar(senha, ativa) {
     { href: `/admin/portal`, label: "Portal", id: "portal" },
     { href: `/admin/blitz${q}`, label: "⚡ BLITZ", id: "blitz" },
     { href: `/admin/importar${q}`, label: "Importar", id: "importar" },
+    { href: `/admin/grupo${q}`, label: "Grupo Timeless", id: "grupo" },
     { href: `/admin/system-check${q}`, label: "Check", id: "system-check" },
     { href: `/admin/dual-ai${q}`, label: "🤖+🤖", id: "dual-ai" },
     { href: `/admin/auto-cadastro${q}`, label: "Auto-cadastro", id: "auto-cadastro" },
@@ -1027,6 +1028,119 @@ ${navbar("", "dashboard")}
   });
 </script>
 </div></body></html>`);
+  });
+
+  // ===== GRUPO WAHA (Timeless) - add via WAHA ou link de convite =====
+  router.get("/grupo", autenticar, async (req, res) => {
+    let grupos = [];
+    let timeless = null;
+    let link = null;
+    let erro = null;
+    let wahaSt = null;
+    try {
+      const wg = require("./integrations/waha-groups");
+      wahaSt = wg.status();
+      try {
+        const lista = await wg.listarGrupos();
+        grupos = Array.isArray(lista) ? lista : (lista.groups || lista.data || []);
+        timeless = grupos.find(g => {
+          const n = (g.subject || g.name || g.title || "").toLowerCase();
+          return n.includes("timeless");
+        });
+        if (timeless) {
+          const id = timeless.id?._serialized || timeless.id || timeless.gid;
+          try { link = await wg.obterLinkConvite(id); } catch (e) { erro = "Link: " + e.message; }
+        }
+      } catch (e) { erro = "Listagem: " + e.message; }
+    } catch (e) { erro = "Modulo: " + e.message; }
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Grupo Timeless — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
+${navbar("", "grupo")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Grupo Timeless (WAHA / ANA)</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px">ANA usa mesma sessao do seu WhatsApp pessoal — ela ve seus grupos. Permite adicionar via WAHA ou via link de convite.</div>
+
+<div class="card" style="margin-bottom:14px;padding:14px;border-left:3px solid ${wahaSt?.api_key_present?'#22c55e':'#ef4444'}">
+  <div style="font-size:12px;color:rgba(255,255,255,0.5)">WAHA status</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.75);font-family:monospace;margin-top:4px">${JSON.stringify(wahaSt, null, 2)}</div>
+  ${erro ? `<div style="margin-top:8px;font-size:12px;color:#ef4444">Erro: ${erro}</div>` : ""}
+</div>
+
+${timeless ? `<div class="card" style="padding:18px;margin-bottom:14px;border-left:3px solid #22c55e">
+  <div style="font-weight:700;font-size:16px;margin-bottom:6px">✓ Grupo Timeless encontrado</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.5);font-family:monospace">${timeless.id?._serialized || timeless.id || ""}</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:4px">${(timeless.participants?.length || timeless.size || "?")} participantes</div>
+</div>` : `<div class="card" style="padding:18px;margin-bottom:14px;border-left:3px solid #f59e0b">
+  <div style="font-weight:600;color:#f59e0b">⚠ Grupo "Timeless" nao encontrado</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:6px">Pode ser que:<br/>1. Nome do grupo seja diferente (vide lista abaixo)<br/>2. ANA WAHA nao esteja conectada<br/>3. Voce ainda nao tenha sido adicionado ao grupo nesse numero</div>
+  ${grupos.length > 0 ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:rgba(255,255,255,0.6)">Ver ${grupos.length} grupos que WAHA enxerga</summary><div style="margin-top:8px;font-family:monospace;font-size:11px;color:rgba(255,255,255,0.55);max-height:300px;overflow-y:auto">${grupos.map(g => `${g.subject || g.name || "?"} <span style="color:rgba(255,255,255,0.3)">${g.id?._serialized || g.id || ""}</span>`).join("<br/>")}</div></details>` : ""}
+</div>`}
+
+${link ? `<div class="card" style="padding:18px;margin-bottom:14px;background:linear-gradient(135deg,#22c55e15,#10b98115);border-color:rgba(34,197,94,0.4)">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:#22c55e;margin-bottom:10px">Link de convite (compartilhar com clientes)</h2>
+  <input value="${link.url}" readonly style="margin-bottom:10px;font-family:monospace;font-size:12px"/>
+  <form method="POST" action="/admin/grupo/incluir-no-blitz" style="display:flex;gap:8px;flex-wrap:wrap">
+    <button type="submit" name="acao" value="adicionar_blitz" class="btn" style="background:rgba(34,197,94,0.3);color:#86efac;font-size:13px">+ Incluir link nas msgs do BLITZ</button>
+    <a href="https://wa.me/?text=${encodeURIComponent("Acabei de te chamar pro grupo Timeless da HairTech: " + link.url)}" target="_blank" class="btn" style="background:rgba(37,211,102,0.25);color:#4ade80;font-size:13px">Compartilhar via WhatsApp</a>
+  </form>
+</div>` : ""}
+
+${timeless ? `<div class="card" style="padding:18px">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin-bottom:10px">Adicionar direto (via WAHA)</h2>
+  <div style="font-size:11px;color:#f59e0b;margin-bottom:12px">⚠ So funciona se a pessoa tem privacidade=Todos. Maioria nao tem. Recomendado: usar link de convite acima.</div>
+  <form method="POST" action="/admin/grupo/add-direto">
+    <input type="hidden" name="group_id" value="${timeless.id?._serialized || timeless.id || ""}"/>
+    <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px">Numeros (um por linha, com 55 ou sem)</label>
+    <textarea name="numeros" rows="6" placeholder="5521987654321&#10;5521912345678&#10;..." style="margin:8px 0 12px;font-family:monospace;font-size:13px"></textarea>
+    <button type="submit" class="btn" style="background:rgba(124,58,237,0.3);border-color:rgba(124,58,237,0.5);color:#a78bfa;width:100%;justify-content:center;padding:12px">Adicionar tentar via WAHA</button>
+  </form>
+</div>` : ""}
+
+</div></body></html>`);
+  });
+
+  router.post("/grupo/incluir-no-blitz", autenticar, async (req, res) => {
+    try {
+      const wg = require("./integrations/waha-groups");
+      const grupos = await wg.listarGrupos();
+      const lista = Array.isArray(grupos) ? grupos : (grupos.groups || grupos.data || []);
+      const timeless = lista.find(g => (g.subject || g.name || "").toLowerCase().includes("timeless"));
+      if (!timeless) return res.send("Grupo Timeless nao encontrado");
+      const id = timeless.id?._serialized || timeless.id;
+      const link = await wg.obterLinkConvite(id);
+
+      // Atualiza blitz-mensagens.json adicionando link
+      const arq = path.join(__dirname, "data", "blitz-mensagens.json");
+      const msgs = JSON.parse(fs.readFileSync(arq, "utf8"));
+      const linha = `\n\nGrupo Timeless (vagas + atualizacoes): ${link.url}`;
+      if (!msgs.quentes.includes(link.url)) msgs.quentes += linha;
+      if (!msgs.mornos.includes(link.url)) msgs.mornos += linha;
+      fs.writeFileSync(arq, JSON.stringify(msgs, null, 2));
+      res.redirect("/admin/blitz");
+    } catch (e) {
+      res.send(`Erro: ${e.message}`);
+    }
+  });
+
+  router.post("/grupo/add-direto", autenticar, async (req, res) => {
+    const groupId = req.body?.group_id;
+    const numerosRaw = (req.body?.numeros || "").toString();
+    const numeros = numerosRaw.split("\n").map(n => n.replace(/\D/g, "")).filter(n => n.length >= 12);
+    if (!groupId || numeros.length === 0) return res.send("dados invalidos");
+
+    let resultado;
+    try {
+      const wg = require("./integrations/waha-groups");
+      resultado = await wg.adicionarParticipante(groupId, numeros);
+    } catch (e) {
+      resultado = { erro: e.message };
+    }
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body style="background:#1a0533;color:#fff;font-family:sans-serif;padding:32px;max-width:800px;margin:0 auto">
+<h1>Resultado adicao</h1>
+<pre style="background:rgba(255,255,255,0.05);padding:16px;border-radius:8px;white-space:pre-wrap">${JSON.stringify(resultado, null, 2)}</pre>
+<a href="/admin/grupo" style="color:#a78bfa">← voltar</a>
+</body></html>`);
   });
 
   // ===== AUTO-CADASTRO (Anthropic Computer Use) =====
@@ -2832,6 +2946,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
     const cards = [
       { href: "/admin/blitz", titulo: "⚡ BLITZ urgente", desc: "1 clique dispara broadcast quentes+mornos + lista top 10 pra ligar — captacao R$16k+ em 14 dias", cor: "#dc2626", icon: "⚡" },
       { href: "/admin/importar", titulo: "Importar leads", desc: "Cola lista de contatos do WhatsApp pessoal pra entrar no proximo BLITZ", cor: "#22c55e", icon: "📥" },
+      { href: "/admin/grupo", titulo: "Grupo Timeless", desc: "ANA WAHA gerencia o grupo - gera link de convite e adiciona pessoas", cor: "#25d366", icon: "👥" },
       { href: "/admin", titulo: "Conversas", desc: "Dashboard de leads e atendimentos no WhatsApp", cor: "#7c3aed", icon: "💬" },
       { href: "/admin/kanban", titulo: "Pipeline", desc: "Kanban de oportunidades por status", cor: "#06b6d4", icon: "📊" },
       { href: "/admin/prontuario", titulo: "Prontuario", desc: "Ficha do paciente, anamnese, fotos, conduta", cor: "#ec4899", icon: "🩺" },
