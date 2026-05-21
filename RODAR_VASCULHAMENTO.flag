@@ -1,0 +1,15 @@
+trigger=2026-05-21T01:40:00BRT
+solicitado_por=Dr.Ricardo via chat Claude Code Web
+motivo=Super endividamento prioridade maxima. Disparar AGORA, sem esperar 02h.
+
+T34 do auto-apply.sh detecta este arquivo e:
+1. Dispara docker exec -d assistente-virtual node /app/scripts/vasculhar-ollama.js
+2. Apaga este arquivo (anti-loop)
+3. Envia Telegram
+
+Apos disparo, vasculhar-ollama.js:
+- Le 200 chats do WhatsApp pessoal via WAHA
+- Classifica via Ollama local (qwen2.5:7b-instruct) em categorias
+  incluindo cobranca_divida
+- Salva resultado em data/vasculhamento.json
+- Telegram com TOP 10 + alertas criticos

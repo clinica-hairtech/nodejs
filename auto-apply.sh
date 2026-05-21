@@ -406,4 +406,20 @@ if [ -f /home/user/nodejs/scripts/agente-noturno.js ]; then
   fi
 fi
 
+# T34: Trigger manual via flag - dispara vasculhamento IMEDIATO sem esperar 02h
+TRIGGER_FLAG=/home/user/nodejs/RODAR_VASCULHAMENTO.flag
+if [ -f "$TRIGGER_FLAG" ]; then
+  echo "[T34] Flag RODAR_VASCULHAMENTO detectada - disparando AGORA"
+  docker exec -d assistente-virtual node /app/scripts/vasculhar-ollama.js > /var/log/hairtech-vasculhar.log 2>&1
+  # Apaga flag pra nao re-disparar
+  rm -f "$TRIGGER_FLAG"
+  # Commit local removendo a flag (cron continua puxando, se nao remover do remote ele vai voltar)
+  TG_TOKEN="${TELEGRAM_BOT_TOKEN:-8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ}"
+  TG_CHAT="${TELEGRAM_CHAT_ID:-8713631351}"
+  curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${TG_CHAT}" \
+    --data-urlencode "text=Vasculhamento Ollama disparado MANUALMENTE via flag. Resultado em ~30min." > /dev/null 2>&1
+  echo "[T34] Telegram avisado"
+fi
+
 echo "[$(date -Iseconds)] auto-apply.sh END (v10 Round 15)"
