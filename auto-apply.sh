@@ -375,4 +375,35 @@ if [ -f /home/user/nodejs/scripts/healthcheck.sh ]; then
   fi
 fi
 
+# T33: Watchdog 30min - verifica saude de TODOS os agentes
+WATCHDOG_CRON=/etc/cron.d/hairtech-watchdog
+if [ ! -f "$WATCHDOG_CRON" ] || ! grep -q "WATCHDOG_VERSION=v1" "$WATCHDOG_CRON" 2>/dev/null; then
+  cat > "$WATCHDOG_CRON" <<'WDEOF'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# WATCHDOG_VERSION=v1
+# A cada 30min: verifica agente noturno + healthchecks ja existem em /etc/cron.d/hairtech-healthcheck
+*/30 * * * * root docker exec assistente-virtual sh -c "pgrep -f agente-noturno.js >/dev/null || node /app/scripts/agente-noturno.js >> /var/log/agente-noturno.log 2>&1 &" >> /var/log/hairtech-watchdog.log 2>&1
+WDEOF
+  chmod 644 "$WATCHDOG_CRON"
+  systemctl restart cron 2>/dev/null
+  echo "[T33] watchdog 30min instalado"
+fi
+touch /var/log/hairtech-watchdog.log /var/log/agente-noturno.log
+chmod 640 /var/log/hairtech-watchdog.log /var/log/agente-noturno.log
+
+# T32: Agente noturno 24/7 - escuta Telegram, usa Ollama local primeiro.
+# Roda dentro do container AV em background. Restart automatico se cair.
+AGENTE_PID_FILE=/tmp/hairtech-agente-noturno.pid
+if [ -f /home/user/nodejs/scripts/agente-noturno.js ]; then
+  # Verifica se ja ta rodando dentro do container AV
+  RUNNING=$(docker exec assistente-virtual sh -c "pgrep -f agente-noturno.js" 2>/dev/null | head -1)
+  if [ -z "$RUNNING" ]; then
+    echo "[T32] iniciando agente noturno em background dentro do AV"
+    docker exec -d assistente-virtual node /app/scripts/agente-noturno.js > /dev/null 2>&1
+  else
+    echo "[T32] agente noturno ja rodando (pid $RUNNING dentro do container)"
+  fi
+fi
+
 echo "[$(date -Iseconds)] auto-apply.sh END (v10 Round 15)"
