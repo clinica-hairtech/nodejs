@@ -135,6 +135,7 @@ function navbar(senha, ativa) {
     { href: `/admin/blitz${q}`, label: "⚡ BLITZ", id: "blitz" },
     { href: `/admin/importar${q}`, label: "Importar", id: "importar" },
     { href: `/admin/grupo${q}`, label: "Grupo Timeless", id: "grupo" },
+    { href: `/admin/investigacao${q}`, label: "🔍 WhatsApp", id: "investigacao" },
     { href: `/admin/system-check${q}`, label: "Check", id: "system-check" },
     { href: `/admin/dual-ai${q}`, label: "🤖+🤖", id: "dual-ai" },
     { href: `/admin/auto-cadastro${q}`, label: "Auto-cadastro", id: "auto-cadastro" },
@@ -1027,6 +1028,67 @@ ${navbar("", "dashboard")}
     options: { responsive: true, plugins: { legend: { display: false } } }
   });
 </script>
+</div></body></html>`);
+  });
+
+  // ===== INVESTIGACAO WHATSAPP (auditoria do WhatsApp pessoal via WAHA) =====
+  router.get("/investigacao", autenticar, async (req, res) => {
+    let resultado = null;
+    let erro = null;
+    try {
+      const wc = require("./integrations/waha-chats");
+      resultado = await wc.auditarTudo({ limit: parseInt(req.query.limit || "100", 10) });
+    } catch (e) { erro = e.message; }
+
+    const cat = (tipo, cor, label) => {
+      const lista = resultado?.por_categoria?.[tipo] || [];
+      return `<div class="card" style="margin-bottom:14px;padding:18px;border-left:3px solid ${cor}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+          <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:${cor}">${label}</h2>
+          <span style="font-size:22px;font-weight:700;color:${cor}">${lista.length}</span>
+        </div>
+        ${lista.length === 0 ? '<div style="color:rgba(255,255,255,0.4);font-size:13px">nenhum</div>' :
+          lista.slice(0, 30).map(item => `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <span style="font-weight:600">${item.nome || item.numero}</span>
+              <span style="color:rgba(255,255,255,0.4);font-family:monospace">${item.numero}</span>
+            </div>
+            <div style="color:rgba(255,255,255,0.55);margin-top:2px">${(item.ultima_msg_preview || "").replace(/</g,"&lt;")}</div>
+          </div>`).join("")}
+        ${lista.length > 30 ? `<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:8px">+ ${lista.length - 30} outros</div>` : ""}
+      </div>`;
+    };
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Investigacao WhatsApp — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:1080px;margin:0 auto;padding:32px 24px">
+${navbar("", "investigacao")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Investigacao WhatsApp pessoal</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px">Auditoria automatica das conversas do +5521967813366 (mesma sessao da ANA). Classificacao via regex: cobrancas, pacientes transplante, pacientes MMP, agendamentos, fornecedores, bancos, pessoal.</div>
+
+${erro ? `<div class="card" style="border-color:rgba(239,68,68,0.4);color:#fca5a5;padding:14px;margin-bottom:18px">
+  <div style="font-weight:600;margin-bottom:6px">Erro:</div>
+  <pre style="font-size:11px;white-space:pre-wrap">${erro}</pre>
+  <div style="font-size:12px;margin-top:8px;color:rgba(255,255,255,0.6)">Possiveis causas: WAHA offline, sessao desconectada, ou WAHA_API_KEY ausente. Verifique /admin/status.</div>
+</div>` : `<div class="card" style="padding:12px;margin-bottom:16px;font-size:12px;color:rgba(255,255,255,0.5)">
+  Total de chats lidos: <strong style="color:#fff">${resultado?.total || 0}</strong> · Erros: ${resultado?.erros?.length || 0}
+</div>`}
+
+${resultado ? `
+${cat("cobranca", "#ef4444", "💸 Cobrancas detectadas")}
+${cat("paciente_transplante", "#22c55e", "🩺 Pacientes transplante")}
+${cat("paciente_mmp", "#3b82f6", "💉 Pacientes MMP/tratamento")}
+${cat("agendamento", "#f59e0b", "📅 Agendamentos/reagendar")}
+${cat("fornecedor", "#8b5cf6", "📦 Fornecedores")}
+${cat("banco", "#06b6d4", "🏦 Bancos / Pix")}
+${cat("pessoal_ou_outro", "#8e8e93", "📋 Pessoal / outros")}
+` : ""}
+
+<div style="margin-top:18px">
+  <a href="/admin/investigacao?limit=300" class="btn" style="background:rgba(255,255,255,0.1)">Re-rodar com 300 chats</a>
+  <a href="/admin/portal" class="btn" style="background:rgba(255,255,255,0.1);margin-left:8px">← portal</a>
+</div>
+
 </div></body></html>`);
   });
 
