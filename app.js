@@ -370,6 +370,37 @@ setInterval(() => {
 app.use("/admin", adminRouter(conversas, enviarMensagem));
 app.use("/admin/export", require("./export-leads"));
 app.use("/", require("./agenda-ics"));
+
+// Webhook DocuSign - recebe eventos de assinatura
+app.post("/webhooks/docusign", express.text({ type: "*/*", limit: "5mb" }), async (req, res) => {
+  try {
+    const ds = require("./integrations/docusign");
+    const sig = req.headers["x-docusign-signature-1"] || "";
+    const raw = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    if (!ds.validarWebhook(raw, sig)) {
+      console.warn("[docusign-webhook] HMAC invalido");
+      return res.status(401).json({ error: "invalid signature" });
+    }
+    const data = JSON.parse(raw);
+    const status = data?.data?.envelopeSummary?.status || data?.event;
+    const envelopeId = data?.data?.envelopeId;
+    console.log(`[docusign-webhook] envelope=${envelopeId} status=${status}`);
+
+    // Telegram avisa
+    if (status === "envelope-completed" || status === "completed") {
+      const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+      const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+      axios.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        chat_id: tgChat,
+        text: `✅ Contrato DocuSign assinado!\nEnvelope: ${envelopeId}\n\nProximo passo: gerar link Pix em /admin/prontuario`,
+      }, { timeout: 5000 }).catch(() => {});
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[docusign-webhook]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 const apiInternal = require("./api-internal");
 apiInternal.setEnviarMensagem(enviarMensagem);
 app.use("/api/internal", apiInternal);

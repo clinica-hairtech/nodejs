@@ -150,6 +150,7 @@ function navbar(senha, ativa) {
     { href: `/admin/broadcast${q}`, label: "Broadcast", id: "broadcast" },
     { href: `/admin/agendamentos${q}`, label: "Agenda", id: "agendamentos" },
     { href: `/admin/prontuario${q}`, label: "Prontuario", id: "prontuario" },
+    { href: `/admin/contratos${q}`, label: "📄 Contratos", id: "contratos" },
     { href: `/admin/compliance${q}`, label: "Compliance", id: "compliance" },
     { href: `/admin/lgpd${q}`, label: "LGPD", id: "lgpd" },
     { href: `/admin/incidentes${q}`, label: "Incidentes", id: "incidentes" },
@@ -1028,6 +1029,218 @@ ${navbar("", "dashboard")}
     options: { responsive: true, plugins: { legend: { display: false } } }
   });
 </script>
+</div></body></html>`);
+  });
+
+  // ===== CONTRATOS DOCUSIGN =====
+  router.get("/contratos", autenticar, (req, res) => {
+    const ds = (() => { try { return require("./integrations/docusign").status(); } catch (_) { return null; } })();
+    const pacientes = Object.entries(conversas)
+      .filter(([_, c]) => c.status === "ativo" || c.status === "humano")
+      .map(([num, c]) => ({ numero: num, nome: c.nome, temperatura: c.temperatura, tipo: c.tipo }))
+      .sort((a, b) => {
+        const order = { quente: 0, morno: 1, frio: 2 };
+        return (order[a.temperatura] || 9) - (order[b.temperatura] || 9);
+      })
+      .slice(0, 50);
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Contratos DocuSign — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:1000px;margin:0 auto;padding:32px 24px">
+${navbar("", "contratos")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Contratos DocuSign</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px">Enviar contrato Paciente Modelo via DocuSign WhatsApp. Paciente assina pelo celular sem precisar de email.</div>
+
+<div class="card" style="margin-bottom:16px;padding:18px;border-left:3px solid ${ds && ds.configured ? '#22c55e' : '#f59e0b'}">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+    <div style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:${ds && ds.configured ? '#22c55e' : '#f59e0b'};font-weight:600">Status DocuSign</div>
+    <div style="font-size:13px;font-weight:600;color:${ds && ds.configured ? '#22c55e' : '#f59e0b'}">${ds && ds.configured ? "PRONTO" : "FALTAM " + (ds?.missing?.length || 0) + " CHAVES"}</div>
+  </div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.7;font-family:monospace">
+    USER_ID: ${ds?.user_id || "—"}<br/>
+    ACCOUNT_ID: ${ds?.account_id || "—"}<br/>
+    BASE_URI: ${ds?.base_uri || "—"}<br/>
+    ${ds?.missing?.length > 0 ? `<br/><span style="color:#f59e0b">Faltam:</span><br/>${ds.missing.map(m => `${m}`).join("<br/>")}` : '<span style="color:#22c55e">✓ Todas configuradas</span>'}
+  </div>
+  ${!ds || !ds.configured ? '<a href="/admin/contratos/guia" class="btn" style="margin-top:14px;background:rgba(245,158,11,0.25);color:#fbbf24">📖 Como obter as chaves (passo a passo)</a>' : ""}
+</div>
+
+${ds && ds.configured ? `
+<h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.4);margin:24px 0 12px">Enviar contrato pra paciente</h2>
+
+<div class="card">
+  ${pacientes.length === 0 ? '<div style="padding:30px;text-align:center;color:rgba(255,255,255,0.4)">Nenhum paciente ativo no momento.</div>' : pacientes.map(p => `<div style="padding:14px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+    <div>
+      <div style="font-weight:600">${p.nome || "(sem nome)"}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.5);font-family:monospace">+${p.numero} · ${p.tipo}</div>
+    </div>
+    <a href="/admin/contratos/enviar/${p.numero}" class="btn" style="background:rgba(34,197,94,0.25);color:#86efac;font-size:12px;padding:8px 14px">Enviar contrato →</a>
+  </div>`).join("")}
+</div>
+` : ""}
+
+</div></body></html>`);
+  });
+
+  router.get("/contratos/enviar/:numero", autenticar, (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    const c = conversas[num] || {};
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Enviar contrato — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:680px;margin:0 auto;padding:32px 24px">
+${navbar("", "contratos")}
+<a href="/admin/contratos" style="color:rgba(255,255,255,0.5);text-decoration:none;font-size:13px">← Voltar pra contratos</a>
+<h1 style="font-size:22px;margin:18px 0">Enviar contrato Paciente Modelo</h1>
+<form method="POST" action="/admin/contratos/enviar/${num}" class="card" style="padding:22px">
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase">Nome completo do paciente</label>
+  <input name="nome" value="${c.nome || ''}" required style="margin:8px 0 14px"/>
+
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase">CPF (so numeros)</label>
+  <input name="cpf" placeholder="00000000000" required style="margin:8px 0 14px"/>
+
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase">Email (opcional - usa WhatsApp se vazio)</label>
+  <input name="email" type="email" placeholder="paciente@email.com" style="margin:8px 0 14px"/>
+
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase">Telefone WhatsApp (com 55)</label>
+  <input name="telefone" value="${num}" required style="margin:8px 0 14px"/>
+
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase">Valor (R$)</label>
+  <select name="valor" required style="margin:8px 0 14px">
+    <option value="8500">R$ 8.500 (à vista, metade antes/metade dia)</option>
+    <option value="9000">R$ 9.000 (12x sem juros - R$ 750/mês)</option>
+  </select>
+
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase">Data prevista cirurgia</label>
+  <input name="dataCirurgia" type="date" required style="margin:8px 0 14px"/>
+
+  <label style="font-size:12px;color:rgba(255,255,255,0.5);text-transform:uppercase">Unidade</label>
+  <select name="unidade" required style="margin:8px 0 18px">
+    <option value="Rio Bonito">Rio Bonito</option>
+    <option value="Niteroi">Niterói</option>
+    <option value="Barra">Barra da Tijuca</option>
+  </select>
+
+  <button type="submit" class="btn" style="background:rgba(34,197,94,0.3);border-color:rgba(34,197,94,0.5);color:#86efac;width:100%;padding:14px;font-size:15px;justify-content:center">📄 Enviar contrato via DocuSign</button>
+</form>
+</div></body></html>`);
+  });
+
+  router.post("/contratos/enviar/:numero", autenticar, async (req, res) => {
+    const num = req.params.numero.replace(/\D/g, "");
+    let resultado;
+    try {
+      const ds = require("./integrations/docusign");
+      resultado = await ds.enviarContratoFUE({
+        nome: req.body?.nome,
+        cpf: (req.body?.cpf || "").replace(/\D/g, ""),
+        valor: parseFloat(req.body?.valor || "0"),
+        dataCirurgia: req.body?.dataCirurgia,
+        unidade: req.body?.unidade,
+        telefone: req.body?.telefone || num,
+        email: req.body?.email,
+      });
+
+      // Notifica Telegram
+      const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
+      const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
+      require("axios").post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        chat_id: tgChat,
+        text: `📄 Contrato DocuSign enviado pra ${req.body?.nome} (+${num}). EnvelopeId: ${resultado?.envelopeId || 'N/A'}`,
+      }, { timeout: 5000 }).catch(() => {});
+    } catch (e) {
+      resultado = { ok: false, error: e.message };
+    }
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Resultado</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:680px;margin:0 auto;padding:32px 24px">
+${navbar("", "contratos")}
+<h1 style="font-size:22px;margin:18px 0">${resultado.ok ? "✅ Contrato enviado" : "❌ Falhou"}</h1>
+<div class="card" style="white-space:pre-wrap;font-family:monospace;font-size:12px;color:rgba(255,255,255,0.7)">${JSON.stringify(resultado, null, 2)}</div>
+<div style="margin-top:18px"><a href="/admin/contratos" class="btn" style="background:rgba(255,255,255,0.1)">← contratos</a></div>
+</div></body></html>`);
+  });
+
+  router.get("/contratos/guia", autenticar, (req, res) => {
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Guia DocuSign — HairTech</title><style>${CSS_BASE}.step{padding:18px;background:rgba(255,255,255,0.04);border-radius:12px;margin-bottom:14px}.step h3{font-size:14px;color:#a78bfa;margin-bottom:8px}.step ol{margin-left:22px}.step li{margin-bottom:6px;font-size:13px}code{background:rgba(0,0,0,0.4);padding:2px 6px;border-radius:4px;font-size:11px}</style></head>
+<body><div style="max-width:780px;margin:0 auto;padding:32px 24px">
+${navbar("", "contratos")}
+<a href="/admin/contratos" style="color:rgba(255,255,255,0.5);text-decoration:none;font-size:13px">← Voltar</a>
+<h1 style="font-size:24px;margin:18px 0">Guia: obter as 4 chaves DocuSign faltantes</h1>
+
+<div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:18px">Tempo total: ~15 min. Você ja tem 3 IDs (USER_ID, ACCOUNT_ID, BASE_URI). Falta:</div>
+
+<div class="step">
+  <h3>1. DOCUSIGN_INTEGRATION_KEY (~3 min)</h3>
+  <ol>
+    <li>Acesse <a href="https://admin.docusign.com" target="_blank" style="color:#60a5fa">admin.docusign.com</a></li>
+    <li>Login com sua conta (clinica.hairtech@icloud.com)</li>
+    <li>Menu lateral: <strong>Integrations</strong> → <strong>Apps and Keys</strong></li>
+    <li>Botão <strong>ADD APP / INTEGRATION KEY</strong></li>
+    <li>Nome do app: <code>HairTech-WhatsApp</code></li>
+    <li>Copia o <strong>Integration Key (GUID)</strong> que aparece</li>
+    <li>Adiciona ao .env: <code>DOCUSIGN_INTEGRATION_KEY=&lt;cola_aqui&gt;</code></li>
+  </ol>
+</div>
+
+<div class="step">
+  <h3>2. DOCUSIGN_RSA_PRIVATE_KEY_BASE64 (~5 min)</h3>
+  <ol>
+    <li>Na mesma página do app criado, role até <strong>Authentication</strong></li>
+    <li>Aba <strong>Service Integration</strong> (ou similar)</li>
+    <li>Botão <strong>+ ADD RSA KEYPAIR</strong></li>
+    <li>DocuSign mostra a <strong>Private Key</strong> (texto com -----BEGIN RSA PRIVATE KEY-----...) <strong>UMA UNICA VEZ</strong>. Copia tudo.</li>
+    <li>No Mac, abre Terminal e cola:<br/><code>echo "&lt;chave_com_quebras&gt;" | base64</code></li>
+    <li>Resultado é uma string longa em base64. Adiciona ao .env:<br/><code>DOCUSIGN_RSA_PRIVATE_KEY_BASE64=&lt;string_base64&gt;</code></li>
+  </ol>
+</div>
+
+<div class="step">
+  <h3>3. DOCUSIGN_HMAC_SECRET (~2 min)</h3>
+  <ol>
+    <li>Menu lateral: <strong>Integrations</strong> → <strong>Connect</strong></li>
+    <li>Botão <strong>+ ADD CONFIGURATION</strong> → <strong>Custom</strong></li>
+    <li>URL: <code>https://hairtech.org/webhooks/docusign</code></li>
+    <li>Eventos: marca todos os de "Envelope" (Sent, Delivered, Completed, Voided)</li>
+    <li>Em <strong>HMAC Authentication</strong>: clica <strong>Add Secret</strong></li>
+    <li>Copia o secret gerado</li>
+    <li>Adiciona ao .env: <code>DOCUSIGN_HMAC_SECRET=&lt;secret&gt;</code></li>
+  </ol>
+</div>
+
+<div class="step">
+  <h3>4. DOCUSIGN_TEMPLATE_ID_FUE (~5 min)</h3>
+  <ol>
+    <li>Acesse <a href="https://app.docusign.com/templates" target="_blank" style="color:#60a5fa">app.docusign.com/templates</a></li>
+    <li>Botão <strong>NEW</strong> → <strong>Create Template</strong></li>
+    <li>Faz upload do PDF <code>contrato_paciente_modelo_transplante_capilar.docx</code> (que o Codex criou)</li>
+    <li>Adiciona campos:
+      <ul style="margin-left:20px;margin-top:4px">
+        <li>Recipient: nome <code>Paciente</code></li>
+        <li>Text fields: <code>nome_paciente</code>, <code>cpf_paciente</code>, <code>valor</code>, <code>data_cirurgia</code>, <code>unidade</code></li>
+        <li>Signature: Paciente (linha onde ele assina)</li>
+      </ul>
+    </li>
+    <li>Save Template. Copia o <strong>Template ID</strong> da URL</li>
+    <li>Adiciona ao .env: <code>DOCUSIGN_TEMPLATE_ID_FUE=&lt;id&gt;</code></li>
+  </ol>
+</div>
+
+<div class="card" style="margin-top:18px;border-color:rgba(124,58,237,0.5);padding:18px">
+  <div style="font-size:13px;color:#a78bfa;font-weight:600;margin-bottom:6px">Apos colocar tudo no .env</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.75);line-height:1.7">
+    SSH na VPS:<br/>
+    <code style="display:block;padding:10px;background:rgba(0,0,0,0.4);border-radius:6px;margin-top:6px">ssh root@72.62.100.6<br/>nano /home/user/nodejs/.env  # adiciona as 4 vars<br/>docker compose up -d --force-recreate assistente-virtual</code>
+    <br/>OU simplesmente espera 2min: T26 do auto-apply.sh detecta .env mudou e recreate sozinho.
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;border-color:rgba(245,158,11,0.4);padding:16px">
+  <div style="font-size:12px;color:#fbbf24;font-weight:600;margin-bottom:6px">⚠ Multi-Channel Delivery (WhatsApp)</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.65);line-height:1.6">
+    Pra enviar contrato direto via WhatsApp (em vez de email), precisa ativar o add-on <strong>Multi-Channel Delivery</strong> na conta DocuSign. Custa ~US$ 0.50 por envelope WhatsApp. Se preferir email gratuito, sem problema - o paciente recebe por email e assina lá.
+  </div>
+</div>
+
 </div></body></html>`);
   });
 
@@ -3101,6 +3314,7 @@ ${s.error ? `<div class="card" style="margin-top:18px;border-color:rgba(255,159,
       { href: "/admin", titulo: "Conversas", desc: "Dashboard de leads e atendimentos no WhatsApp", cor: "#7c3aed", icon: "💬" },
       { href: "/admin/kanban", titulo: "Pipeline", desc: "Kanban de oportunidades por status", cor: "#06b6d4", icon: "📊" },
       { href: "/admin/prontuario", titulo: "Prontuario", desc: "Ficha do paciente, anamnese, fotos, conduta", cor: "#ec4899", icon: "🩺" },
+      { href: "/admin/contratos", titulo: "📄 Contratos DocuSign", desc: "Enviar contrato Paciente Modelo via WhatsApp/email - paciente assina pelo celular", cor: "#06b6d4", icon: "📄" },
       { href: "/admin/agentes", titulo: "Agentes", desc: "13 agentes OpenClaw com invoke de teste", cor: "#0ea5e9", icon: "🤖" },
       { href: "/admin/status", titulo: "Status", desc: "Saude dos containers, OpenClaw, flags", cor: "#10b981", icon: "💚" },
       { href: "/admin/handoff", titulo: "Handoff", desc: "Pedidos pendentes de acao humana (CAPTCHA, login)", cor: "#f59e0b", icon: "🖐", badge: contadores.handoff },
