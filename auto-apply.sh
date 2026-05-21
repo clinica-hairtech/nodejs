@@ -335,6 +335,28 @@ STATUS_FILE=/home/user/nodejs/status.json
 chmod 644 "$STATUS_FILE"
 echo "[T25] status.json escrito"
 
+# T31: Cron noturno - vasculhamento Ollama madrugada + relatorio matinal
+NOTURNO_CRON=/etc/cron.d/hairtech-noturno
+if [ ! -f "$NOTURNO_CRON" ] || ! grep -q "NOTURNO_VERSION=v1" "$NOTURNO_CRON" 2>/dev/null; then
+  cat > "$NOTURNO_CRON" <<'NOTEOF'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# NOTURNO_VERSION=v1
+# Vasculhamento Ollama: 02:00 BRT = 05:00 UTC. Custo zero (IA local).
+0 5 * * * root docker exec assistente-virtual node /app/scripts/vasculhar-ollama.js >> /var/log/hairtech-noturno.log 2>&1
+# Backup Postgres local: 03:30 BRT = 06:30 UTC
+30 6 * * * root docker exec hairtech-postgres pg_dump -U hairtech hairtechdb 2>/dev/null | gzip > /opt/backup/pg-$(date +\%Y\%m\%d).sql.gz 2>>/var/log/hairtech-noturno.log && find /opt/backup -name "pg-*.sql.gz" -mtime +7 -delete 2>>/var/log/hairtech-noturno.log
+# Relatorio matinal Telegram: 07:45 BRT = 10:45 UTC
+45 10 * * * root docker exec assistente-virtual node /app/scripts/relatorio-matinal.js >> /var/log/hairtech-noturno.log 2>&1
+NOTEOF
+  chmod 644 "$NOTURNO_CRON"
+  systemctl restart cron 2>/dev/null
+  echo "[T31] cron noturno instalado (vasculhamento 02h + backup 03h30 + relatorio 07h45)"
+fi
+mkdir -p /opt/backup
+touch /var/log/hairtech-noturno.log
+chmod 640 /var/log/hairtech-noturno.log
+
 # T30: Healthcheck v2 com cooldown + para AV em restart-loop.
 # Migra de /opt/healthcheck/check.sh antigo (sem cooldown) pro novo.
 # Tambem sinaliza fim do flood se houve mais de 30 alertas/dia recentes.
