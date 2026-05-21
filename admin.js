@@ -136,6 +136,7 @@ function navbar(senha, ativa) {
     { href: `/admin/importar${q}`, label: "Importar", id: "importar" },
     { href: `/admin/grupo${q}`, label: "Grupo Timeless", id: "grupo" },
     { href: `/admin/investigacao${q}`, label: "🔍 WhatsApp", id: "investigacao" },
+    { href: `/admin/vasculhamento${q}`, label: "🤖 Vasculhar", id: "vasculhamento" },
     { href: `/admin/system-check${q}`, label: "Check", id: "system-check" },
     { href: `/admin/dual-ai${q}`, label: "🤖+🤖", id: "dual-ai" },
     { href: `/admin/auto-cadastro${q}`, label: "Auto-cadastro", id: "auto-cadastro" },
@@ -1030,6 +1031,77 @@ ${navbar("", "dashboard")}
   });
 </script>
 </div></body></html>`);
+  });
+
+  // ===== VASCULHAMENTO OLLAMA (analise noturna custo zero) =====
+  const VASC_FILE = path.join(__dirname, "data", "vasculhamento.json");
+
+  router.get("/vasculhamento", autenticar, (req, res) => {
+    let v = null;
+    try { v = JSON.parse(fs.readFileSync(VASC_FILE, "utf8")); } catch (_) {}
+
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Vasculhamento Ollama — HairTech</title><style>${CSS_BASE}</style></head>
+<body><div style="max-width:1080px;margin:0 auto;padding:32px 24px">
+${navbar("", "vasculhamento")}
+<h1 style="font-size:24px;font-weight:700;margin-bottom:6px">Vasculhamento Ollama (custo zero)</h1>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:16px">Ollama local analisa cada conversa do WhatsApp pessoal, classifica, sumariza, identifica alertas. Roda em background sem queimar API paga.</div>
+
+${!v ? `<div class="card" style="padding:24px;text-align:center;border-color:rgba(245,158,11,0.4)">
+  <div style="font-size:14px;color:#fbbf24;margin-bottom:14px">Nenhum vasculhamento rodado ainda.</div>
+  <form method="POST" action="/admin/vasculhamento/iniciar">
+    <button type="submit" class="btn" style="background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;padding:14px 24px;font-weight:600">🤖 Iniciar vasculhamento agora</button>
+  </form>
+  <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:12px">Demora 20-40min. Telegram avisa quando termina.</div>
+</div>` : `
+
+${v.em_andamento ? `<div class="card" style="padding:18px;margin-bottom:18px;border-color:rgba(59,130,246,0.5);background:rgba(59,130,246,0.1)">
+  <div style="font-size:14px;color:#60a5fa;font-weight:600;margin-bottom:6px">⏳ Em andamento</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.7)">Processados ${v.processados} de ${v.total_alvo} (${Math.round(v.processados/v.total_alvo*100)}%)</div>
+  <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:6px">Iniciado: ${new Date(v.inicio_iso).toLocaleString("pt-BR")}</div>
+</div>` : `<div class="card" style="padding:18px;margin-bottom:18px;background:linear-gradient(135deg,#22c55e15,#10b98115);border-color:rgba(34,197,94,0.4)">
+  <div style="font-size:14px;color:#22c55e;font-weight:600">✅ Finalizado</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:6px">${new Date(v.inicio_iso).toLocaleString("pt-BR")} → ${new Date(v.fim_iso).toLocaleString("pt-BR")} (${v.duracao_min}min)<br/>Processados ${v.processados}/${v.total_chats} · Erros ${v.erros}</div>
+  <form method="POST" action="/admin/vasculhamento/iniciar" style="margin-top:10px"><button type="submit" class="btn" style="background:rgba(124,58,237,0.25);color:#a78bfa;font-size:12px">Rodar novamente</button></form>
+</div>`}
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px">
+${Object.entries(v.por_categoria || {}).map(([cat, n]) => `<div class="card" style="padding:14px;text-align:center">
+  <div style="font-size:22px;font-weight:700">${n}</div>
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);text-transform:capitalize">${cat.replace(/_/g, " ")}</div>
+</div>`).join("")}
+</div>
+
+${(v.alertas_criticos || []).length > 0 ? `<div class="card" style="padding:18px;margin-bottom:14px;border-left:3px solid #ef4444">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:#ef4444;margin-bottom:12px">🚨 Alertas críticos (${v.alertas_criticos.length})</h2>
+  ${v.alertas_criticos.map(a => `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px">
+    <div style="font-weight:600">${a.nome || a.numero}</div>
+    <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-top:2px">${a.alerta}</div>
+  </div>`).join("")}
+</div>` : ""}
+
+${(v.prioridade_alta || []).length > 0 ? `<div class="card" style="padding:18px;margin-bottom:14px;border-left:3px solid #f59e0b">
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:#f59e0b;margin-bottom:12px">⚡ Prioridade alta (${v.prioridade_alta.length})</h2>
+  ${v.prioridade_alta.slice(0, 30).map(p => `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px">
+    <div style="display:flex;justify-content:space-between"><span style="font-weight:600">${p.nome || p.numero}</span><span style="font-size:11px;color:#f59e0b">${p.prioridade}</span></div>
+    <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-top:2px">${p.resumo_1linha || ""}</div>
+    <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-top:2px">Acao: ${p.ultima_acao_dr || "?"} · ${p.categoria}</div>
+  </div>`).join("")}
+</div>` : ""}
+
+`}
+</div></body></html>`);
+  });
+
+  router.post("/vasculhamento/iniciar", autenticar, (req, res) => {
+    // Spawna processo em background dentro do AV (ja tem node)
+    const { spawn } = require("child_process");
+    const proc = spawn("node", [path.join(__dirname, "scripts", "vasculhar-ollama.js")], {
+      detached: true,
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    proc.unref();
+    res.redirect("/admin/vasculhamento");
   });
 
   // ===== CONTRATOS DOCUSIGN =====
