@@ -1490,9 +1490,12 @@ ${pct >= 85 ? `<div class="card" style="margin-top:18px;background:linear-gradie
 <h2>Investimento</h2>
 <div class="box" style="text-align:center; padding:24px">
   <div style="font-size:14px; color:#666; margin-bottom:6px">Programa Paciente Modelo</div>
-  <div style="font-size:42px; font-weight:800; color:#5b2c80; letter-spacing:-1px">R$ 8.000</div>
-  <div style="font-size:14px; color:#666; margin-top:4px">12x sem juros no cartão · R$ 666 por mês</div>
-  <div style="font-size:11px; color:#999; margin-top:10px">Tabela padrão da mesma cirurgia: R$ 10.000 (à vista) / R$ 10.000 12x (com juros)</div>
+  <div style="font-size:30px; font-weight:800; color:#5b2c80; letter-spacing:-1px">R$ 8.500 à vista</div>
+  <div style="font-size:14px; color:#666; margin-top:6px">(metade antes da cirurgia, metade no dia)</div>
+  <div style="font-size:14px; color:#666; margin-top:14px">ou</div>
+  <div style="font-size:30px; font-weight:800; color:#5b2c80; letter-spacing:-1px; margin-top:4px">R$ 9.000 em 12x sem juros</div>
+  <div style="font-size:14px; color:#666; margin-top:4px">R$ 750 por mês</div>
+  <div style="font-size:11px; color:#999; margin-top:14px">Tabela padrão da mesma cirurgia (sem participação no programa modelo): R$ 10.000 cartão 12x · R$ 9.500 à vista</div>
 </div>
 
 <h2>Termos de exclusividade</h2>
@@ -1694,12 +1697,52 @@ ${navbar("", "importar")}
   const BLITZ_MSGS_FILE = path.join(__dirname, "data", "blitz-mensagens.json");
   function lerMsgsBlitz() {
     try { return JSON.parse(fs.readFileSync(BLITZ_MSGS_FILE, "utf8")); }
-    catch (_) { return { quentes: "", mornos: "" }; }
+    catch (_) { return { quentes: "", mornos: "", reagendamento: "", sem_resposta: "" }; }
+  }
+
+  // Protecao anti-madrugada: nao envia entre 22h e 8h BRT (UTC-3).
+  // Se "forcar=1" no body, ignora. Se fora da janela, espera ate as 9h.
+  function horaBrasilia() {
+    const ag = new Date();
+    const utc = ag.getTime() + (ag.getTimezoneOffset() * 60000);
+    return new Date(utc - 3 * 3600000).getHours();
+  }
+  function dentroHorarioComercial() {
+    const h = horaBrasilia();
+    return h >= 8 && h < 22;
+  }
+
+  // Filtros extras de leads "esquecidos" - quem mandou msg e bot nao respondeu adequado
+  function leadsSemRespostaAdequada() {
+    return Object.entries(conversas)
+      .filter(([num, c]) => {
+        if (c.status !== "ativo") return false;
+        const h = c.historico || [];
+        if (h.length === 0) return false;
+        // ultima msg foi do paciente (user) e bot nao respondeu, OU bot deu resposta generica
+        const ult = h[h.length - 1];
+        return ult.role === "user" && (Date.now() - (ult.ts || c.ultimaAtividade || 0)) > 6 * 3600000;
+      })
+      .map(([num]) => num);
+  }
+  function leadsQueriamReagendar() {
+    const regex = /reagend|remarc|outro horario|outro dia|aparelho|manutenc|adiar|mover/i;
+    return Object.entries(conversas)
+      .filter(([num, c]) => {
+        if (c.status !== "ativo" && c.status !== "humano") return false;
+        const h = c.historico || [];
+        return h.some(m => m.role === "user" && regex.test(m.content || ""));
+      })
+      .map(([num]) => num);
   }
 
   router.get("/blitz", autenticar, (req, res) => {
     const segs = segmentosDisponiveis();
     const msgs = lerMsgsBlitz();
+    const reagendar = leadsQueriamReagendar();
+    const semResp = leadsSemRespostaAdequada();
+    const horaOk = dentroHorarioComercial();
+    const hBR = horaBrasilia();
 
     // Top 10 quentes pra ligar
     const top10 = Object.entries(conversas)
@@ -1722,30 +1765,45 @@ ${navbar("", "importar")}
 <body><div style="max-width:900px;margin:0 auto;padding:32px 24px">
 ${navbar("", "blitz")}
 <h1 style="font-size:28px;font-weight:800;margin-bottom:6px">⚡ BLITZ — captacao urgente</h1>
-<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px">1 clique dispara: broadcast quentes + broadcast mornos + Telegram com resumo + lista top 10 pra ligar.</div>
+<div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:14px">1 clique dispara: broadcast quentes + mornos + reagendamento + sem resposta + Telegram com resumo + lista top 10 pra ligar.</div>
+
+${!horaOk ? `<div class="card" style="margin-bottom:18px;border-color:rgba(239,68,68,0.5);background:rgba(239,68,68,0.1)">
+  <div style="font-size:13px;color:#ef4444;font-weight:700;margin-bottom:4px">⚠ Fora do horario comercial (BRT atual: ${hBR}h)</div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.7);line-height:1.5">Disparar agora pode acordar paciente. Botao abaixo agenda pra <strong>9h da manha proxima</strong>. Pra forcar dispatch imediato, marcar "Forcar agora".</div>
+</div>` : ""}
 
 <div class="card" style="padding:24px;margin-bottom:18px">
   <div style="font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,0.5);margin-bottom:14px">O que vai acontecer agora se voce clicar</div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px">
-    <div style="background:rgba(239,68,68,0.15);padding:14px;border-radius:12px;border-left:3px solid #ef4444">
-      <div style="font-size:24px;font-weight:700">${segs.quentes.length}</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.6)">leads quentes</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px">vao receber msg de vagas urgentes</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px">
+    <div style="background:rgba(239,68,68,0.15);padding:12px;border-radius:12px;border-left:3px solid #ef4444">
+      <div style="font-size:22px;font-weight:700">${segs.quentes.length}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.6)">leads quentes</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px">vagas urgentes</div>
     </div>
-    <div style="background:rgba(245,158,11,0.15);padding:14px;border-radius:12px;border-left:3px solid #f59e0b">
-      <div style="font-size:24px;font-weight:700">${segs.mornos.length}</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.6)">leads mornos</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px">vao receber msg educacional + vagas</div>
+    <div style="background:rgba(245,158,11,0.15);padding:12px;border-radius:12px;border-left:3px solid #f59e0b">
+      <div style="font-size:22px;font-weight:700">${segs.mornos.length}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.6)">leads mornos</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px">educacional + vagas</div>
     </div>
-    <div style="background:rgba(124,58,237,0.15);padding:14px;border-radius:12px;border-left:3px solid #7c3aed">
-      <div style="font-size:24px;font-weight:700">${top10.length}</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.6)">top 10 pra ligar</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px">lista no fim desta pagina</div>
+    <div style="background:rgba(59,130,246,0.15);padding:12px;border-radius:12px;border-left:3px solid #3b82f6">
+      <div style="font-size:22px;font-weight:700">${reagendar.length}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.6)">pediram reagendar</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px">aparelho voltou</div>
     </div>
-    <div style="background:rgba(34,197,94,0.15);padding:14px;border-radius:12px;border-left:3px solid #22c55e">
-      <div style="font-size:24px;font-weight:700">${segs.quentes.length + segs.mornos.length}</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.6)">total disparado</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px">delay 3s entre msgs</div>
+    <div style="background:rgba(168,85,247,0.15);padding:12px;border-radius:12px;border-left:3px solid #a855f7">
+      <div style="font-size:22px;font-weight:700">${semResp.length}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.6)">sem resposta</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px">tentou e nao respondi</div>
+    </div>
+    <div style="background:rgba(124,58,237,0.15);padding:12px;border-radius:12px;border-left:3px solid #7c3aed">
+      <div style="font-size:22px;font-weight:700">${top10.length}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.6)">top 10 pra ligar</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px">lista no fim</div>
+    </div>
+    <div style="background:rgba(34,197,94,0.15);padding:12px;border-radius:12px;border-left:3px solid #22c55e">
+      <div style="font-size:22px;font-weight:700">${segs.quentes.length + segs.mornos.length + reagendar.length + semResp.length}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.6)">total disparado</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px">delay 3s entre msgs</div>
     </div>
   </div>
 
@@ -1759,8 +1817,12 @@ ${navbar("", "blitz")}
     <div style="font-size:12px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;white-space:pre-wrap;font-family:monospace">${msgs.mornos.replace(/</g,"&lt;")}</div>
   </details>
 
-  <form method="POST" action="/admin/blitz/executar" onsubmit="return confirm('Tem certeza? Vai disparar ${segs.quentes.length + segs.mornos.length} mensagens AGORA.');">
-    <button type="submit" class="btn" style="background:linear-gradient(135deg,#dc2626,#f59e0b);border:none;color:#fff;width:100%;padding:24px;font-size:18px;font-weight:700;justify-content:center;letter-spacing:.5px">⚡ DISPARAR BLITZ AGORA</button>
+  <form method="POST" action="/admin/blitz/executar" onsubmit="return confirm('Tem certeza? Vai disparar ${segs.quentes.length + segs.mornos.length + reagendar.length + semResp.length} mensagens.');">
+    ${!horaOk ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#fca5a5;margin-bottom:14px;padding:10px;background:rgba(239,68,68,0.1);border-radius:8px">
+      <input type="checkbox" name="forcar" value="1" style="width:auto"/>
+      Forcar disparo agora (mesmo fora do horario comercial)
+    </label>` : ""}
+    <button type="submit" class="btn" style="background:linear-gradient(135deg,#dc2626,#f59e0b);border:none;color:#fff;width:100%;padding:24px;font-size:18px;font-weight:700;justify-content:center;letter-spacing:.5px">${horaOk ? "⚡ DISPARAR BLITZ AGORA" : "⏰ AGENDAR PARA 9H DA MANHA"}</button>
   </form>
 </div>
 
@@ -1785,66 +1847,93 @@ ${navbar("", "blitz")}
   router.post("/blitz/executar", autenticar, (req, res) => {
     const segs = segmentosDisponiveis();
     const msgs = lerMsgsBlitz();
+    const reagendar = leadsQueriamReagendar();
+    const semResp = leadsSemRespostaAdequada();
+    const forcar = req.body?.forcar === "1";
     const tgToken = process.env.TELEGRAM_BOT_TOKEN || "8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ";
     const tgChat = process.env.TELEGRAM_CHAT_ID || "8713631351";
     const axiosLib = require("axios");
 
-    // Responde imediato pro doctor saber que comecou
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/><meta http-equiv="refresh" content="2;url=/admin/portal"><title>BLITZ iniciado</title><style>${CSS_BASE}</style></head>
+    // Se fora do horario comercial e nao forcou: agenda pras 9h da manha
+    const horaOk = dentroHorarioComercial();
+    let delayMs = 0;
+    let textoStatus = "BLITZ disparado AGORA";
+    if (!horaOk && !forcar) {
+      const ag = new Date();
+      const utc = ag.getTime() + (ag.getTimezoneOffset() * 60000);
+      const brt = new Date(utc - 3 * 3600000);
+      const target = new Date(brt);
+      target.setHours(9, 0, 0, 0);
+      if (brt.getHours() >= 9) target.setDate(target.getDate() + 1);
+      delayMs = target.getTime() - brt.getTime();
+      const horasAte = Math.round(delayMs / 3600000 * 10) / 10;
+      textoStatus = `BLITZ AGENDADO pra ${target.toLocaleString("pt-BR")} BRT (em ${horasAte}h)`;
+    }
+
+    // Responde imediato pro doctor saber
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"/><meta http-equiv="refresh" content="3;url=/admin/portal"><title>BLITZ</title><style>${CSS_BASE}</style></head>
 <body><div style="max-width:600px;margin:80px auto;padding:32px;text-align:center">
-  <div style="font-size:48px;margin-bottom:18px">⚡</div>
-  <h1 style="font-size:24px;margin-bottom:14px">BLITZ disparado</h1>
+  <div style="font-size:48px;margin-bottom:18px">${delayMs > 0 ? "⏰" : "⚡"}</div>
+  <h1 style="font-size:22px;margin-bottom:14px">${textoStatus}</h1>
   <div style="font-size:14px;color:rgba(255,255,255,0.6);margin-bottom:20px">
-    ${segs.quentes.length + segs.mornos.length} mensagens em fila (${Math.round((segs.quentes.length + segs.mornos.length) * 3 / 60)}min). Voce recebe Telegram quando terminar.
+    Total: ${segs.quentes.length + segs.mornos.length + reagendar.length + semResp.length} mensagens.<br/>
+    ETA: ${Math.round((segs.quentes.length + segs.mornos.length + reagendar.length + semResp.length) * 3 / 60)}min de execucao.
   </div>
-  <div style="font-size:13px;color:rgba(255,255,255,0.4)">Redirecionando pro portal em 2s...</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.4)">Telegram avisa quando finalizar. Redirecionando...</div>
 </div></body></html>`);
 
-    // Dispatch em background
-    (async () => {
-      const inicio = Date.now();
-      let okQuente = 0, falhaQuente = 0, okMorno = 0, falhaMorno = 0;
+    // Helper de envio com dedupe (mesmo numero so recebe 1 msg do blitz, mesmo se em multiplos segmentos)
+    const enviarSegmento = async (numeros, msg, label, jaEnviados) => {
+      let ok = 0, falha = 0;
+      for (const num of numeros) {
+        if (jaEnviados.has(num)) continue;
+        jaEnviados.add(num);
+        if (!enviarMensagem) break;
+        try {
+          await enviarMensagem(num, msg);
+          ok++;
+          if (conversas[num]) {
+            conversas[num].historico = conversas[num].historico || [];
+            conversas[num].historico.push({ role: "assistant", content: msg, ts: Date.now(), origem: `blitz-${label}` });
+            conversas[num].ultimaAtividade = Date.now();
+            db.salvarConversa(num, conversas[num]).catch(() => {});
+            db.salvarMensagem(num, "assistant", msg).catch(() => {});
+          }
+        } catch (e) { falha++; console.error(`[blitz ${label}]`, num, e.message); }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      return { ok, falha };
+    };
 
-      // Avisa Telegram que comecou
+    // Dispatch em background (com delay se agendado)
+    (async () => {
+      if (delayMs > 0) {
+        // Aviso de agendamento
+        await axiosLib.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+          chat_id: tgChat,
+          text: `⏰ BLITZ agendado pra 9h da manha\n${segs.quentes.length} quentes + ${segs.mornos.length} mornos + ${reagendar.length} reagendar + ${semResp.length} sem resposta`,
+        }, { timeout: 5000 }).catch(() => {});
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+
+      const inicio = Date.now();
+      // Aviso de inicio
       await axiosLib.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
         chat_id: tgChat,
-        text: `⚡ BLITZ iniciado\n${segs.quentes.length} quentes + ${segs.mornos.length} mornos = ${segs.quentes.length + segs.mornos.length} mensagens.\nETA: ${Math.round((segs.quentes.length + segs.mornos.length) * 3 / 60)}min.`,
+        text: `⚡ BLITZ iniciado\nQuentes: ${segs.quentes.length}\nMornos: ${segs.mornos.length}\nReagendar: ${reagendar.length}\nSem resposta: ${semResp.length}`,
       }, { timeout: 5000 }).catch(() => {});
 
-      for (const num of segs.quentes) {
-        if (!enviarMensagem) break;
-        try {
-          await enviarMensagem(num, msgs.quentes);
-          okQuente++;
-          if (conversas[num]) {
-            conversas[num].historico = conversas[num].historico || [];
-            conversas[num].historico.push({ role: "assistant", content: msgs.quentes, ts: Date.now(), origem: "blitz" });
-            conversas[num].ultimaAtividade = Date.now();
-            db.salvarConversa(num, conversas[num]).catch(() => {});
-            db.salvarMensagem(num, "assistant", msgs.quentes).catch(() => {});
-          }
-        } catch (e) { falhaQuente++; console.error("[blitz quente]", num, e.message); }
-        await new Promise(r => setTimeout(r, 3000));
-      }
-
-      for (const num of segs.mornos) {
-        if (!enviarMensagem) break;
-        try {
-          await enviarMensagem(num, msgs.mornos);
-          okMorno++;
-          if (conversas[num]) {
-            conversas[num].historico = conversas[num].historico || [];
-            conversas[num].historico.push({ role: "assistant", content: msgs.mornos, ts: Date.now(), origem: "blitz" });
-            conversas[num].ultimaAtividade = Date.now();
-            db.salvarConversa(num, conversas[num]).catch(() => {});
-            db.salvarMensagem(num, "assistant", msgs.mornos).catch(() => {});
-          }
-        } catch (e) { falhaMorno++; console.error("[blitz morno]", num, e.message); }
-        await new Promise(r => setTimeout(r, 3000));
-      }
+      const enviados = new Set();
+      // Ordem: reagendamento (mais quente) -> sem_resposta -> quentes -> mornos
+      const r1 = await enviarSegmento(reagendar, msgs.reagendamento || msgs.quentes, "reagendar", enviados);
+      const r2 = await enviarSegmento(semResp, msgs.sem_resposta || msgs.quentes, "sem-resposta", enviados);
+      const r3 = await enviarSegmento(segs.quentes, msgs.quentes, "quente", enviados);
+      const r4 = await enviarSegmento(segs.mornos, msgs.mornos, "morno", enviados);
 
       const min = Math.round((Date.now() - inicio) / 60000);
-      const resumo = `⚡ BLITZ finalizado em ${min}min\n\nQuentes: ${okQuente} ok / ${falhaQuente} falha\nMornos: ${okMorno} ok / ${falhaMorno} falha\nTotal enviadas: ${okQuente + okMorno}\n\nProximo passo: liga pra top 10 quentes em https://hairtech.org/admin/blitz`;
+      const totalOk = r1.ok + r2.ok + r3.ok + r4.ok;
+      const totalFalha = r1.falha + r2.falha + r3.falha + r4.falha;
+      const resumo = `⚡ BLITZ finalizado em ${min}min\n\nReagendar: ${r1.ok}/${reagendar.length}\nSem resposta: ${r2.ok}/${semResp.length}\nQuentes: ${r3.ok}/${segs.quentes.length}\nMornos: ${r4.ok}/${segs.mornos.length}\n\nTotal enviadas: ${totalOk}\nFalhas: ${totalFalha}\n\nProximo: liga pra top 10 em https://hairtech.org/admin/blitz`;
       await axiosLib.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
         chat_id: tgChat, text: resumo,
       }, { timeout: 5000 }).catch(() => {});

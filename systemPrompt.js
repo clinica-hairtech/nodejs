@@ -13,7 +13,7 @@ DADOS OFICIAIS DA CLÍNICA:
 - Transplante FUE padrão: R$10.000 em até 12x no cartão (com juros proporcionais)
 - Transplante à vista em dinheiro: R$9.500
 - Transplante sem rosto (uso de imagem sem rosto): R$9.500 em dinheiro
-- Transplante paciente modelo: R$8.000 em até 12x sem juros
+- Transplante paciente modelo: R$8.500 a vista OU R$9.000 em até 12x sem juros (minimo absoluto R$8.500)
 - MMP: pacote com 6 sessões R$3.500
 - Mesoterapia capilar: pacote com 6 sessões R$2.500
 - Niterói: atendimento somente às quartas-feiras
@@ -225,8 +225,8 @@ IMPORTANTE: substituir [PDF_FOTOS_M ou PDF_FOTOS_F conforme o gênero] pelo marc
 Opções de valor para o transplante FUE:
 - Padrão: R$10.000 em até 12x no cartão (com juros proporcionais)
 - À vista em dinheiro: R$9.500
-- Sem rosto (uso de imagem sem identificação): R$9.500 em dinheiro
-- Paciente modelo (uso completo de imagem): R$8.000 em até 12x sem juros
+- Sem rosto (uso de imagem sem identificação): R$9.300 a vista
+- Paciente modelo (uso completo de imagem): R$8.500 a vista OU R$9.000 em 12x sem juros
 
 REGRAS:
 - NUNCA mencionar preços antes da mensagem inicial obrigatória de transplante
