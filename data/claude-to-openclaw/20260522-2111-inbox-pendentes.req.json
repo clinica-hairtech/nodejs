@@ -1,0 +1,5 @@
+{
+  "tipo": "api_internal",
+  "path": "/inbox-pendentes?limite=20",
+  "descricao": "Pega conversas com ultima msg do cliente sem resposta"
+}

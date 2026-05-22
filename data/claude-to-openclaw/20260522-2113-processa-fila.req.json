@@ -1,0 +1,5 @@
+{
+  "tipo": "openclaw_chat",
+  "prompt": "Le data/openclaw-fila/tarefas-22052026.json e processa as 10 tarefas pendentes em ordem de prioridade. Para cada uma: marca em_andamento, executa usando Ollama VPS (qwen2.5:7b-instruct), salva output no arquivo indicado, marca como concluida e move pra concluidas[]. Manda Telegram cada conclusao. Custo R$0 obrigatorio.",
+  "descricao": "Dispara OpenClaw pra processar fila de 10 tarefas Ollama"
+}

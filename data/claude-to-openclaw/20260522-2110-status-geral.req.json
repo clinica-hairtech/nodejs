@@ -1,0 +1,5 @@
+{
+  "tipo": "shell_read",
+  "cmd": "docker ps --format \"{{.Names}} {{.Status}}\"",
+  "descricao": "Primeiro teste da ponte: lista containers rodando"
+}

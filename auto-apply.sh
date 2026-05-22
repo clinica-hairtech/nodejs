@@ -334,6 +334,23 @@ EOF
   chmod 640 /var/log/hairtech-vigia.log
 fi
 
+# T34: Instala cron da ponte Claude<->OpenClaw (1/1min).
+BRIDGE_SRC=/home/user/nodejs/scripts/cron/claude-openclaw-bridge.sh
+BRIDGE_CRON=/etc/cron.d/hairtech-bridge
+if [ -f "$BRIDGE_SRC" ]; then
+  chmod +x "$BRIDGE_SRC"
+  if [ ! -f "$BRIDGE_CRON" ] || ! grep -q "claude-openclaw-bridge.sh" "$BRIDGE_CRON" 2>/dev/null; then
+    cat > "$BRIDGE_CRON" <<EOF
+* * * * * root $BRIDGE_SRC >> /var/log/hairtech-bridge.log 2>&1
+EOF
+    chmod 644 "$BRIDGE_CRON"
+    systemctl restart cron 2>/dev/null
+    echo "[T34] cron ponte Claude-OpenClaw instalado (1/1min)"
+  fi
+  touch /var/log/hairtech-bridge.log
+  chmod 640 /var/log/hairtech-bridge.log
+fi
+
 # T33: Instala cron do organizar-fotos.js (04h BRT = 07h UTC).
 FOTOS_SRC=/home/user/nodejs/scripts/organizar-fotos.js
 FOTOS_CRON=/etc/cron.d/hairtech-fotos
