@@ -371,6 +371,7 @@ app.use("/admin", adminRouter(conversas, enviarMensagem));
 app.use("/admin/export", require("./export-leads"));
 app.use("/", require("./agenda-ics"));
 app.use("/api/agent", require("./agents-api"));
+app.use("/", require("./pre-consulta"));
 
 // Webhook DocuSign - recebe eventos de assinatura
 app.post("/webhooks/docusign", express.text({ type: "*/*", limit: "5mb" }), async (req, res) => {
