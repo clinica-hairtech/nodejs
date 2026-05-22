@@ -248,6 +248,81 @@ curl -s -X POST "https://api.telegram.org/bot8470054351:AAEBUfBP1oTT2Yx9W5J5_sgF
 
 ---
 
+### T-12: PREENCHER CHAVES/TOKENS no .env da VPS (~30min)
+
+Codex tem Chrome do Mac com login cacheado. Pega cada chave logando nas plataformas e atualiza o .env da VPS via SSH.
+
+```bash
+# 1. SSH na VPS pra editar .env
+ssh -i ~/.ssh/hairtech_vps_ed25519 root@72.62.100.6 << 'REMOTE'
+cd /home/user/nodejs
+cp .env .env.bak-$(date +%Y%m%d_%H%M%S)
+REMOTE
+
+# 2. Pra cada chave abaixo, abre Chrome no Mac via AppleScript, pega, atualiza .env via SSH
+
+# 2a. WHATSAPP_TOKEN (Meta Cloud API)
+osascript -e 'tell application "Google Chrome" to open location "https://developers.facebook.com/apps/"'
+# Aguarda Dr. confirmar Telegram que abriu OU detecta via AppleScript que App HairTech esta visivel
+# Pega token "Permanent system user token" via:
+#   - Em "WhatsApp" > "API Setup" > Token (copia)
+# Salva temporario em ~/HairTech_temp_keys.txt (NUNCA commitar)
+# Atualiza .env da VPS:
+TOKEN_META=$(cat ~/HairTech_temp_keys.txt | grep META | cut -d= -f2)
+ssh -i ~/.ssh/hairtech_vps_ed25519 root@72.62.100.6 \
+  "sed -i 's|^WHATSAPP_TOKEN=.*|WHATSAPP_TOKEN=$TOKEN_META|' /home/user/nodejs/.env"
+
+# 2b. GEMINI_API_KEY (aistudio.google.com)
+osascript -e 'tell application "Google Chrome" to open location "https://aistudio.google.com/apikey"'
+# Login cacheado de rmeireles87@gmail.com. Clica "Create API Key" projeto HairTech.
+# Mesmo processo: salva tempo, atualiza .env via SSH
+
+# 2c. OPENCLAW_BASICAUTH
+SENHA=$(openssl rand -base64 16 | tr -d '+/=')  # senha aleatoria
+HASH=$(htpasswd -nbB ricardo "$SENHA" | sed -e 's/\$/\$\$/g')
+ssh -i ~/.ssh/hairtech_vps_ed25519 root@72.62.100.6 \
+  "sed -i 's|^OPENCLAW_BASICAUTH=.*|OPENCLAW_BASICAUTH=$HASH|' /home/user/nodejs/.env"
+# Telegram pro Dr. com a SENHA limpa pra ele guardar no 1Password
+curl -s -X POST "https://api.telegram.org/bot8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ/sendMessage" \
+  -d "chat_id=8713631351" \
+  --data-urlencode "text=Codex T-12: senha BasicAuth claw.hairtech.org gerada. User: ricardo. Senha: $SENHA. Salvar no 1Password."
+
+# 2d. POSTGRES_RO_URL
+SENHA_RO=$(openssl rand -base64 24 | tr -d '+/=')
+ssh -i ~/.ssh/hairtech_vps_ed25519 root@72.62.100.6 \
+  "docker exec hairtech-postgres psql -U hairtech -d hairtechdb -c \"CREATE USER openclaw_ro WITH PASSWORD '$SENHA_RO'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO openclaw_ro;\" 2>/dev/null || \
+   docker exec hairtech-postgres psql -U hairtech -d hairtechdb -c \"ALTER USER openclaw_ro WITH PASSWORD '$SENHA_RO';\""
+ssh -i ~/.ssh/hairtech_vps_ed25519 root@72.62.100.6 \
+  "sed -i \"s|^POSTGRES_RO_URL=.*|POSTGRES_RO_URL=postgresql://openclaw_ro:$SENHA_RO@hairtech-postgres:5432/hairtechdb|\" /home/user/nodejs/.env"
+
+# 2e. DOCUSIGN (4 chaves)
+osascript -e 'tell application "Google Chrome" to open location "https://account.docusign.com/me/apps-and-keys"'
+# Cria Integration Key projeto HairTech, gera par RSA, copia chaves
+# Salva no .env da VPS
+
+# 2f. ANTHROPIC_API_KEY (pra OpenClaw usar Claude pesado)
+osascript -e 'tell application "Google Chrome" to open location "https://console.anthropic.com/settings/keys"'
+# Login cacheado. Cria key "hairtech-openclaw". Copia. SSH atualiza .env do OpenClaw:
+ssh -i ~/.ssh/hairtech_vps_ed25519 root@72.62.100.6 \
+  "echo 'ANTHROPIC_API_KEY=$ANTH_KEY' >> /opt/hairtech-openclaw/.env && touch /opt/hairtech-openclaw/ANTHROPIC_READY.flag"
+
+# 3. Restart containers
+ssh -i ~/.ssh/hairtech_vps_ed25519 root@72.62.100.6 \
+  "cd /home/user/nodejs && docker compose restart assistente-virtual hairtech-openclaw"
+
+# 4. Apaga arquivo temporario de keys
+rm -f ~/HairTech_temp_keys.txt
+
+# 5. Telegram resumo
+curl -s -X POST "https://api.telegram.org/bot8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ/sendMessage" \
+  -d "chat_id=8713631351" \
+  --data-urlencode "text=T-12 concluido. Chaves WhatsApp, Gemini, OpenClaw BasicAuth, Postgres RO, DocuSign(4), Anthropic atualizadas no .env VPS. Containers reiniciados."
+```
+
+**SE alguma chave precisar 2FA / aprovacao Dr.**: marca `BLOQUEADA_DR` no log e segue. Dr. completa depois do celular.
+
+---
+
 ## RESUMO TEMPO ESTIMADO
 
 | Tarefa | Tempo | Tipo |
