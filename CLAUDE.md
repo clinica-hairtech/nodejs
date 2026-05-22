@@ -1,14 +1,31 @@
 # CLAUDE.md — HairTech Assistente Virtual
 # Contexto permanente para sessões Claude Code
 
+## 🔴 REGRA CENTRAL — NÃO PARAR (Dr. Ricardo 22/05/2026)
+
+**NUNCA pausar a sessão pra pedir aprovação. NUNCA dizer "aguardando".**
+
+- Tarefa precisa do Dr. (login, cartão, OAuth, decisão jurídica) → **pular pra próxima**, marcar em PENDENCIAS como bloqueado
+- Trabalhar **24/7** até Dr. mandar parar explicitamente
+- Default em ambiguidade: escolha segura (backward compat, placeholder, nunca destrutivo). Documentar decisão tomada em vez de perguntar
+- Atingiu limite tokens: documentar onde parou em MEMORIA-COMPACTADA + PENDENCIAS, commitar, próxima sessão retoma
+
+**JÁ AUTORIZADO** (não perguntar):
+- Editar app.js (backup automático)
+- Criar arquivos novos
+- Commit + push em `claude/hairtech-whatsapp-ai-liD5V`
+- Instalar crons via auto-apply.sh
+- Usar Ollama/Gemini/Claude/Anthropic Computer Use quando necessário
+- Endpoints novos com senha hairtech2026 ou Bearer token
+
 ## ⚡ LEITURA OBRIGATÓRIA AO INICIAR QUALQUER SESSÃO
 
 **Antes de qualquer ação, ler nesta ordem:**
 
-1. `docs/MEMORIA-COMPACTADA.md` — **fonte da verdade** (estado atual, pendências, decisões)
-2. Este arquivo (CLAUDE.md) — regras permanentes
-3. `docs/briefing-master-v4.md` — briefing técnico completo (consultar quando precisar de detalhes)
-4. `docs/relatorio-2026-05-14.md` — última sessão (se for retomar de onde parou)
+1. `PENDENCIAS_22052026_CONSOLIDADO.md` — **fonte da verdade operacional** (P0/P1/P2/P3)
+2. `docs/MEMORIA-COMPACTADA.md` — estado técnico atual
+3. Este arquivo (CLAUDE.md) — regras permanentes
+4. `docs/briefing-master-v4.md` — briefing técnico completo
 
 **Após qualquer compactação automática de contexto:** re-ler `docs/MEMORIA-COMPACTADA.md` pois esse arquivo é a memória externa que sobrevive a compactações.
 

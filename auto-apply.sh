@@ -334,6 +334,22 @@ EOF
   chmod 640 /var/log/hairtech-vigia.log
 fi
 
+# T33: Instala cron do organizar-fotos.js (04h BRT = 07h UTC).
+FOTOS_SRC=/home/user/nodejs/scripts/organizar-fotos.js
+FOTOS_CRON=/etc/cron.d/hairtech-fotos
+if [ -f "$FOTOS_SRC" ]; then
+  if [ ! -f "$FOTOS_CRON" ] || ! grep -q "organizar-fotos.js" "$FOTOS_CRON" 2>/dev/null; then
+    cat > "$FOTOS_CRON" <<EOF
+0 7 * * * root docker exec assistente-virtual node /app/scripts/organizar-fotos.js >> /var/log/hairtech-fotos.log 2>&1
+EOF
+    chmod 644 "$FOTOS_CRON"
+    systemctl restart cron 2>/dev/null
+    echo "[T33] cron organizar-fotos instalado (04h BRT diario)"
+  fi
+  touch /var/log/hairtech-fotos.log
+  chmod 640 /var/log/hairtech-fotos.log
+fi
+
 # T32: Instala cron do dump-inbox.sh (xx:15 e xx:45 — fora dos slots auto-apply).
 DUMP_SRC=/home/user/nodejs/scripts/cron/dump-inbox.sh
 DUMP_CRON=/etc/cron.d/hairtech-dump-inbox
