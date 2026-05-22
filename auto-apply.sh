@@ -380,6 +380,26 @@ STATUS_FILE=/home/user/nodejs/status.json
 chmod 644 "$STATUS_FILE"
 echo "[T25] status.json escrito"
 
+# T25b: Commitar status.json + data/ JSONs de volta pro repo a cada 30min
+# Permite Claude/Codex/Manus auditarem estado real sem ssh/webfetch.
+LAST_PUSH_FILE=/var/log/hairtech-status-pushed.ts
+NOW_TS=$(date +%s)
+LAST_TS=$(cat "$LAST_PUSH_FILE" 2>/dev/null || echo 0)
+if [ $((NOW_TS - LAST_TS)) -ge 1800 ]; then
+  cd /home/user/nodejs 2>/dev/null
+  git add status.json data/vasculhamento.json data/crm-fila.json data/incidentes.json 2>/dev/null
+  if ! git diff --staged --quiet 2>/dev/null; then
+    git -c user.email="bot@hairtech.org" -c user.name="HairTech VPS Bot" \
+      commit -m "[bot] status snapshot $(date -Iseconds)" 2>/dev/null
+    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    git push origin "$BRANCH" 2>/dev/null && echo "$NOW_TS" > "$LAST_PUSH_FILE"
+    echo "[T25b] status pushed pro Git"
+  else
+    echo "[T25b] sem mudancas pra commitar"
+    echo "$NOW_TS" > "$LAST_PUSH_FILE"
+  fi
+fi
+
 # T31: Cron noturno - vasculhamento Ollama madrugada + relatorio matinal
 NOTURNO_CRON=/etc/cron.d/hairtech-noturno
 if [ ! -f "$NOTURNO_CRON" ] || ! grep -q "NOTURNO_VERSION=v1" "$NOTURNO_CRON" 2>/dev/null; then
