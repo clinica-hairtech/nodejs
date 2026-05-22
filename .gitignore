@@ -109,3 +109,23 @@ dist
 
 # TernJS port file
 .tern-port
+
+# Fotos binarias dos pacientes (mas commita os indices JSON)
+data/fotos-pacientes/**/*.jpg
+data/fotos-pacientes/**/*.jpeg
+data/fotos-pacientes/**/*.png
+data/fotos-pacientes/**/*.webp
+data/fotos-pacientes/**/*.heic
+!data/fotos-pacientes/_index.json
+!data/fotos-pacientes/_relatorio.json
+
+# Pre-consultas: indice publico mas fotos privadas
+data/pre-consultas/**/*.jpg
+data/pre-consultas/**/*.jpeg
+data/pre-consultas/**/*.png
+data/pre-consultas/**/*.heic
+!data/pre-consultas/index.json
+
+# Logs do vigia / dump
+/var/log/hairtech-*
+

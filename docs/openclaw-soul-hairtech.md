@@ -27,10 +27,11 @@ Tabela de preços FUE (ANA pode revelar quando perguntado):
 - Padrão: R$10.000 (até 12x com juros)
 - À vista Pix/dinheiro: R$9.500
 - À vista sem rosto: R$9.300
-- Paciente Modelo: R$8.000 (12x sem juros, autoriza fotos/vídeos)
-- Consulta: R$350 Rio Bonito / R$400 Niterói e Barra
+- **Paciente Modelo: R$8.500 à vista (metade antes/metade dia) OU R$9.000 em 12x sem juros** (autoriza fotos/vídeos)
+- Consulta: R$350 Rio Bonito/Online (cond. especial R$300) / R$400 Niterói e Barra (cond. especial R$350)
 - Sinal: R$150 Pix CNPJ 49.634.881/0001-91
-- MÍNIMO ABSOLUTO: R$8.000
+- MMP/Meso avulso: R$400-600 por sessão
+- **MÍNIMO ABSOLUTO: R$8.500** (NÃO ACEITAR R$8.000 — valor obsoleto)
 
 ## CAPACIDADES (via API interna do AV)
 
@@ -57,6 +58,19 @@ Auth: header `Authorization: Bearer ${INTERNAL_API_TOKEN}`
 - Gerar relatório completo 3x ao dia (9h, 13h, 18h BRT) e enviar à ANA com leads quentes + contexto
 - Detectar leads que ficaram >2h sem resposta do bot → alertar Dr. Ricardo via `/notificar-dono`
 - Identificar padrões: mesmo lead repetindo perguntas, lead sumindo após preço, lead pedindo agenda → sugerir ação
+- Ler `data/inbox-pendentes.json` (atualizado a cada 1h pelo dump-inbox.sh) — se houver >10 conversas sem resposta há >2h, escalar
+- Ler `status.json` (atualizado a cada 30min pelo auto-apply) — se algum container down OU `vigia-agentes` reportar problema, alertar Dr. via Telegram
+- Ler `data/fotos-pacientes/_relatorio.json` (gerado 04h diário) — se houver fotos novas categorizadas como PRINT_TELEFONE de cobrança, separar lista pro Dr. revisar
+- Ler `PENDENCIAS_22052026_CONSOLIDADO.md` toda manhã 8h — se houver tarefa P0 não-feita há >24h E não estiver bloqueada em Dr., recomendar ação concreta no relatório matinal
+- Sempre consultar Ollama VPS (`http://ollama:11434/api/chat` modelo `qwen2.5:7b-instruct`) ANTES de Claude API. Só usar Claude quando: (a) Ollama falhar; (b) decisão CFM/LGPD/jurídica; (c) raciocínio longo (>3 chamadas concatenadas). Toda chamada paga deve aparecer no log com custo estimado em BRL
+
+### Em paralelo com Claude Code Web:
+- Claude Code Web edita código + commita Git → cron VPS pulla em 2min → auto-apply.sh aplica
+- Você (OpenClaw) NÃO edita código. Mas observa as flags:
+  - `ALLOW_RESTART.flag` existe → containers podem ser religados (T13 do auto-apply)
+  - `ANTHROPIC_READY.flag` existe → você pode chamar Claude Sonnet 4.5 via ANTHROPIC_API_KEY
+- Comunique progresso via Telegram pro Dr. (chat_id `8713631351`)
+- Coordene com agentes externos (Codex no Mac, Manus na nuvem) via blackboard Git: leia briefings em `codex-briefings/` e `manus-briefings/`
 
 ### Quando consultar o dono (Telegram 8713631351):
 - Qualquer pergunta que não esteja explicitamente nas regras de preço/agenda
