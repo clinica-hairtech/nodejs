@@ -122,13 +122,14 @@
 ### P2.3 Reauthorize Gmail MCP + Drive MCP (Dr.)
 - Tokens expirados precisam clique do Dr. em claude.ai/settings
 
-### P2.4 ANA follow-up estruturado (gap identificado na auditoria)
-- ANA tem `iniciarRelatorio` mas sem cron de follow-up D+1/D+7/D+30
-- Implementar: similar a `scripts/proactive-pos.js` mas via ANA, não AV
+### P2.4 ~~ANA follow-up estruturado~~ — **JÁ EXISTE**
+- Verificado em `scripts/proactive-pos.js`: D+1/D+3/D+7/D+15/D+30 implementado
+- Auditoria 21/05 estava desatualizada
 
-### P2.5 Handoff AV ↔ ANA estruturado (gap identificado)
-- Hoje é manual. Construir fila `handoff-queue.json` com payload completo
-- AV detecta perfil "vendas FUE" → empurra pra ANA
+### P2.5 ~~Handoff AV ↔ ANA estruturado~~ — **JÁ EXISTE**
+- Verificado em `app.js:562` (`[HANDOFF_ANA]`) + função `handoffParaAna` linha 775
+- AV detecta venda complexa e empurra pra ANA via fila
+- Auditoria 21/05 estava desatualizada
 
 ### P2.6 Custom GPT ChatGPT (Dr. configura uma vez)
 - Connect ChatGPT à ponte multi-agente

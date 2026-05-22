@@ -334,6 +334,23 @@ EOF
   chmod 640 /var/log/hairtech-vigia.log
 fi
 
+# T32: Instala cron do dump-inbox.sh (xx:15 e xx:45 — fora dos slots auto-apply).
+DUMP_SRC=/home/user/nodejs/scripts/cron/dump-inbox.sh
+DUMP_CRON=/etc/cron.d/hairtech-dump-inbox
+if [ -f "$DUMP_SRC" ]; then
+  chmod +x "$DUMP_SRC"
+  if [ ! -f "$DUMP_CRON" ] || ! grep -q "dump-inbox.sh" "$DUMP_CRON" 2>/dev/null; then
+    cat > "$DUMP_CRON" <<EOF
+15,45 * * * * root $DUMP_SRC >> /var/log/hairtech-dump-inbox.log 2>&1
+EOF
+    chmod 644 "$DUMP_CRON"
+    systemctl restart cron 2>/dev/null
+    echo "[T32] cron dump-inbox instalado (xx:15 e xx:45)"
+  fi
+  touch /var/log/hairtech-dump-inbox.log
+  chmod 640 /var/log/hairtech-dump-inbox.log
+fi
+
 # T25: Escreve status.json pra /admin/status ler.
 STATUS_FILE=/home/user/nodejs/status.json
 {
