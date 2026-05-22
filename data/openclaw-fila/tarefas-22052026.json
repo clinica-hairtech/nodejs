@@ -1,0 +1,90 @@
+{
+  "criado_em": "2026-05-22",
+  "criado_por": "claude-code-web",
+  "regra": "OpenClaw consome esta fila usando Ollama VPS (qwen2.5:7b-instruct) PRIMEIRO. So usa Claude API se Ollama falhar. Marca cada tarefa como done movendo pro array 'concluidas' com timestamp e resultado.",
+  "pendentes": [
+    {
+      "id": "OC-001",
+      "prioridade": "alta",
+      "tipo": "auditoria-codigo",
+      "descricao": "Auditar lock anti-duplo BLITZ em app.js. Verificar se ha protecao contra dispara BLITZ duas vezes no mesmo dia. Procurar: arquivo flag (.blitz-hoje.flag), entrada no DB, ou variavel em memoria. Se NAO houver lock, criar arquivo /home/user/nodejs/data/openclaw-fila/relatorio-OC-001.md descrevendo o gap e sugerindo fix.",
+      "input_files": ["app.js", "admin.js", "data/blitz-mensagens.json"],
+      "output_file": "data/openclaw-fila/relatorio-OC-001.md",
+      "modelo_sugerido": "qwen2.5:7b-instruct",
+      "custo_estimado_brl": 0
+    },
+    {
+      "id": "OC-002",
+      "prioridade": "alta",
+      "tipo": "vasculhamento",
+      "descricao": "Ler tabela conversations do Postgres. Para cada conversa com mensagem do paciente nas ultimas 72h SEM resposta do bot, gerar lista priorizada: (numero, nome, ultima_msg, tempo_sem_resposta, motivo_provavel). Salvar em data/openclaw-fila/inbox-priorizada-OC-002.json. Top 20 vai pro Telegram do Dr.",
+      "input_query": "SELECT numero, nome, historico, updated_at FROM conversations WHERE updated_at > NOW() - INTERVAL '72 hours' ORDER BY updated_at DESC",
+      "output_file": "data/openclaw-fila/inbox-priorizada-OC-002.json",
+      "modelo_sugerido": "qwen2.5:7b-instruct",
+      "custo_estimado_brl": 0
+    },
+    {
+      "id": "OC-003",
+      "prioridade": "media",
+      "tipo": "classificacao-ia",
+      "descricao": "Para cada conversa do tipo 'transplante' nos ultimos 30 dias, analisar o historico e classificar em: PRONTO_PRA_FECHAR (mencionou data, valor aceito, sinal aprovado), AGUARDANDO_FOTOS, DUVIDA_PRECO, OBJEC_TEMPO, OBJEC_MEDO, SUMIDO. Salvar em data/openclaw-fila/leads-classificados-OC-003.json. Notificar Dr. com TOP 5 de PRONTO_PRA_FECHAR.",
+      "input_query": "SELECT numero, nome, historico FROM conversations WHERE tipo='transplante' AND updated_at > NOW() - INTERVAL '30 days'",
+      "output_file": "data/openclaw-fila/leads-classificados-OC-003.json",
+      "modelo_sugerido": "qwen2.5:7b-instruct",
+      "custo_estimado_brl": 0
+    },
+    {
+      "id": "OC-004",
+      "prioridade": "media",
+      "tipo": "relatorio-financeiro",
+      "descricao": "Varrer Postgres em busca de mensagens contendo comprovantes Pix nos ultimos 30 dias (texto contem 'comprovante', 'pix', 'pagamento', valor R$ X). Cruzar com tabela conversations. Gerar relatorio data/openclaw-fila/financeiro-30d-OC-004.json com: total_pix_mencionados, lista (numero, valor, data, ja_baixado_ou_nao). Pre-aviso pro Dr. sobre quem provavelmente pagou mas nao foi baixado.",
+      "output_file": "data/openclaw-fila/financeiro-30d-OC-004.json",
+      "modelo_sugerido": "qwen2.5:7b-instruct",
+      "custo_estimado_brl": 0
+    },
+    {
+      "id": "OC-005",
+      "prioridade": "media",
+      "tipo": "deteccao-padroes",
+      "descricao": "Analisar conversas que viraram 'humano' (status=humano) nos ultimos 14 dias. Identificar PADROES de quando o bot escalou. Gerar data/openclaw-fila/padroes-escala-OC-005.md com top 5 gatilhos detectados. Recomendar ajustes no systemPrompt.js ou regex de classificacao.",
+      "modelo_sugerido": "qwen2.5:7b-instruct",
+      "custo_estimado_brl": 0
+    },
+    {
+      "id": "OC-006",
+      "prioridade": "baixa",
+      "tipo": "limpeza-banco",
+      "descricao": "Listar conversas SEM atividade ha mais de 6 meses E sem nenhuma compra registrada. Salvar em data/openclaw-fila/leads-frios-OC-006.json (NAO apagar nada, so listar). Dr. decide depois se quer arquivar.",
+      "input_query": "SELECT numero, nome, criado_em, updated_at FROM conversations WHERE updated_at < NOW() - INTERVAL '6 months' AND tipo != 'paciente_fechado' ORDER BY updated_at ASC LIMIT 500",
+      "output_file": "data/openclaw-fila/leads-frios-OC-006.json",
+      "modelo_sugerido": "qwen2.5:7b-instruct",
+      "custo_estimado_brl": 0
+    },
+    {
+      "id": "OC-007",
+      "prioridade": "alta",
+      "tipo": "monitoramento",
+      "descricao": "A cada 30min, ler status.json e data/inbox-pendentes.json. Se houver >5 conversas pendentes ha >2h E nao houver alerta enviado na ultima 1h, mandar Telegram pro Dr. com TOP 5 prioridades. Cooldown de 1h pra nao spam.",
+      "modelo_sugerido": "qwen2.5:7b-instruct (so pra resumo final)",
+      "custo_estimado_brl": 0
+    },
+    {
+      "id": "OC-008",
+      "prioridade": "media",
+      "tipo": "deteccao-spam",
+      "descricao": "Identificar conversas que sao SPAM/golpe/bot (perguntas genericas, links suspeitos, idioma estranho). Sinalizar com tag 'spam_provavel' via /api/internal/lead/:numero/anotar. Output data/openclaw-fila/spam-detectado-OC-008.json com lista pra Dr. validar.",
+      "modelo_sugerido": "qwen2.5:7b-instruct",
+      "custo_estimado_brl": 0
+    }
+  ],
+  "concluidas": [],
+  "instrucoes_processamento": {
+    "1": "Le essa fila uma vez por execucao do cron (9h/13h/18h BRT + sob demanda).",
+    "2": "Processa ate 3 tarefas por rodada (evita travar). Prioriza por campo prioridade.",
+    "3": "Pra cada tarefa: marca status='em_andamento', executa, salva output, marca como concluida com timestamp.",
+    "4": "Se Ollama VPS estiver fora ou demorar >30s, marca falha e PASSA pra proxima.",
+    "5": "Nunca chama Claude API pra tarefa de fila — todas sao Ollama-only. Custo R$0 obrigatorio.",
+    "6": "Toda conclusao gera 1 linha de Telegram pro Dr.: 'OC-XXX concluida em Xs. Output: link'.",
+    "7": "Se aparecer tarefa nova nesta fila (Claude Code Web adicionou via commit), processa na proxima rodada."
+  }
+}

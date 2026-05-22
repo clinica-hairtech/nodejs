@@ -64,6 +64,30 @@ Auth: header `Authorization: Bearer ${INTERNAL_API_TOKEN}`
 - Ler `PENDENCIAS_22052026_CONSOLIDADO.md` toda manhã 8h — se houver tarefa P0 não-feita há >24h E não estiver bloqueada em Dr., recomendar ação concreta no relatório matinal
 - Sempre consultar Ollama VPS (`http://ollama:11434/api/chat` modelo `qwen2.5:7b-instruct`) ANTES de Claude API. Só usar Claude quando: (a) Ollama falhar; (b) decisão CFM/LGPD/jurídica; (c) raciocínio longo (>3 chamadas concatenadas). Toda chamada paga deve aparecer no log com custo estimado em BRL
 
+### FILA DE TAREFAS (ALTA PRIORIDADE — economiza cota Claude Code Web do Dr.)
+
+Ler `data/openclaw-fila/tarefas-*.json` a cada execucao do cron (9h/13h/18h BRT + sob demanda).
+
+Pra cada tarefa em `pendentes[]`:
+1. Marca `status="em_andamento"`, salva timestamp
+2. Usa SEMPRE Ollama VPS primeiro: `POST http://ollama:11434/api/chat` com `model=qwen2.5:7b-instruct`
+3. Se a tarefa tem `input_query`, executa via `POST /api/internal/sql-read` (modo SELECT-only)
+4. Salva output no `output_file` indicado
+5. Move tarefa de `pendentes[]` pra `concluidas[]` com `{id, terminou_em, custo_brl, output_size}`
+6. Manda Telegram 1 linha pro Dr.: `[OC-XXX] concluida em Xs. Output: data/openclaw-fila/...`
+
+**REGRA ABSOLUTA**: tarefas dessa fila NUNCA podem usar Claude API paga. Tudo Ollama, R$0. Se Ollama falhar, marca `falhou=true` e segue.
+
+Quando concluir todas pendentes, commitar `data/openclaw-fila/*.json` de volta pro Git via:
+```bash
+cd /home/user/nodejs
+git add data/openclaw-fila/
+git -c user.email="openclaw@hairtech.org" -c user.name="OpenClaw Agent" commit -m "[OC] processou fila $(date -Iseconds)"
+git push origin claude/hairtech-whatsapp-ai-liD5V
+```
+
+Claude Code Web le esses resultados na proxima sessao do Dr. SEM precisar processar nada — economia maxima de cota.
+
 ### Em paralelo com Claude Code Web:
 - Claude Code Web edita código + commita Git → cron VPS pulla em 2min → auto-apply.sh aplica
 - Você (OpenClaw) NÃO edita código. Mas observa as flags:
