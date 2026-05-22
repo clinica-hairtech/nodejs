@@ -75,6 +75,24 @@
       "descricao": "Identificar conversas que sao SPAM/golpe/bot (perguntas genericas, links suspeitos, idioma estranho). Sinalizar com tag 'spam_provavel' via /api/internal/lead/:numero/anotar. Output data/openclaw-fila/spam-detectado-OC-008.json com lista pra Dr. validar.",
       "modelo_sugerido": "qwen2.5:7b-instruct",
       "custo_estimado_brl": 0
+    },
+    {
+      "id": "OC-009",
+      "prioridade": "alta",
+      "tipo": "vasculhar-meta-waha",
+      "descricao": "Mensagens RETIDAS na inbox do AV/ANA. NAO use navegador. Use as APIs:\n1. Meta Cloud API (WA_TOKEN do .env do AV) - puxar conversas/mensagens dos ultimos 7 dias para o numero +5521993542383. Endpoint GET https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages NAO existe (Meta nao tem read history). Fonte real e o Postgres do AV: ler via /api/internal/inbox-pendentes e /api/internal/inbox-snapshot.\n2. WAHA (sessao ANA, +5521967813366) - endpoint http://whatsapp-ana:3000/api/default/chats?limit=200 com header X-Api-Key=$WHATSAPP_ANA_KEY. Listar TODAS as conversas. Para cada chat com mensagens novas nao lidas: http://whatsapp-ana:3000/api/default/chats/{chatId}/messages?limit=20 - puxar texto + tipo (audio/image/document).\n3. Cruzar tudo com tabela conversations do Postgres.\n4. Para AUDIOS encontrados (WAHA tipo='audio'): baixar o media via WAHA /files/{id} e processar com whisper-cpp local se disponivel no container, senao listar como 'AUDIO_PENDENTE_TRANSCRICAO' para Dr. transcrever depois.\n5. Salvar output em data/openclaw-fila/inbox-completa-OC-009.json com schema: {gerado_em, total_chats, top_pendentes:[{canal:'AV|ANA', numero, nome, ultima_msg_resumo, tipo_msg, urgencia, sugestao_resposta_ollama}]}.\n6. Telegram pro Dr. com top 5 mais urgentes.",
+      "modelo_sugerido": "qwen2.5:7b-instruct (Ollama VPS)",
+      "custo_estimado_brl": 0,
+      "regra_critica": "NAO chamar Claude/Gemini/OpenAI pagos. Tudo Ollama local. Se whisper-cpp nao estiver instalado, marca audios como pendentes e segue. NUNCA usa WebFetch ou navegador - tudo via API direta na rede docker hairtech-network."
+    },
+    {
+      "id": "OC-010",
+      "prioridade": "media",
+      "tipo": "transcrever-audios",
+      "descricao": "Se OC-009 identificou audios pendentes: instalar whisper-cpp tiny.pt model no container (modelo de 39MB, suporta portugues). Apos instalado, processar cada audio listado em data/openclaw-fila/inbox-completa-OC-009.json. Output: complementar OC-009 com campo transcricao em cada item de audio. Custo: R$0 (whisper roda na CPU).",
+      "modelo_sugerido": "whisper.cpp tiny.pt local",
+      "custo_estimado_brl": 0,
+      "depende_de": "OC-009"
     }
   ],
   "concluidas": [],
