@@ -2,15 +2,21 @@
 # Cole este arquivo INTEIRO no Codex/Cowork quando voltar (20:11 ou agora).
 # Codex executa em SÉRIE (uma por vez) pra não sobrecarregar o Mac.
 
-## REGRA ABSOLUTA
+## REGRA ABSOLUTA — NUNCA PARAR
 
 1. Executar UMA tarefa por vez (NUNCA paralelo)
 2. Antes de cada tarefa: Telegram pro Dr. "iniciando T-X"
 3. Depois de cada tarefa: Telegram "T-X concluida" OU "T-X FALHOU porque ..."
-4. Se uma tarefa falhar: parar TUDO e relatar
-5. Todas IAs usam Ollama local gemma3:4b (R$0). NUNCA chamar OpenAI/Anthropic/Gemini paga sem autorização expressa do Dr.
-6. Aguardar 30s entre tarefas (CPU descansar)
-7. Se Mac ficar quente (>85°C) ou bateria <20%: parar e avisar
+4. **NUNCA parar a execucao.** Se uma tarefa precisa do Dr. (aprovacao, login, decisao):
+   - Marca como `BLOQUEADA_DR` no log
+   - Manda Telegram com motivo
+   - **PULA pra proxima tarefa imediatamente**
+   - Quando Dr. desbloquear (criar flag/responder SIM), tarefa bloqueada roda em loop de retry no final
+5. Se uma tarefa FALHAR por erro tecnico (rede, disco cheio, etc): Telegram com detalhe e pula pra proxima. So para se HD cheio (>95%) ou crash sistema
+6. Todas IAs usam Ollama local gemma3:4b (R$0). NUNCA chamar OpenAI/Anthropic/Gemini paga sem autorizacao expressa do Dr.
+7. Aguardar 30s entre tarefas (CPU descansar)
+8. Se Mac ficar quente (>85°C) ou bateria <20%: pausar 5min, continuar. **NAO PARAR.**
+9. Apos T-11, voltar pro inicio e re-tentar tarefas marcadas como `BLOQUEADA_DR` (loop infinito ate Dr. mandar parar via Telegram com mensagem `STOP`)
 
 ## CONTATOS
 
@@ -110,28 +116,36 @@ curl -s -X POST "https://api.telegram.org/bot8470054351:AAEBUfBP1oTT2Yx9W5J5_sgF
 
 ---
 
-### T-4: Aguardar Dr. APROVAR estrutura de organização HD
-
-NÃO executar T-5 (organizar Mac) sem o Dr. confirmar a estrutura.
+### T-4: Verificar aprovacao Dr. pra organizar HD (NAO PARA — pula se nao aprovou)
 
 ```bash
-# Verifica se Dr. aprovou
+# Verifica se Dr. ja aprovou
 APROVADO=$(curl -s "https://api.github.com/repos/clinica-hairtech/nodejs/contents/data/HD_APROVADO.flag?ref=claude/hairtech-whatsapp-ai-liD5V" 2>/dev/null | grep -c "name")
 if [ "$APROVADO" = "0" ]; then
   curl -s -X POST "https://api.telegram.org/bot8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ/sendMessage" \
     -d "chat_id=8713631351" \
-    --data-urlencode "text=T-4 AGUARDANDO: Dr. precisa ler PROPOSTA_ORGANIZACAO_HD.md no GitHub e aprovar. Pra aprovar, crie arquivo HD_APROVADO.flag no repo OU responde SIM nesse chat."
-  exit 0
+    --data-urlencode "text=T-4 BLOQUEADA_DR: HD organizacao aguarda Dr. ler PROPOSTA_ORGANIZACAO_HD.md e criar HD_APROVADO.flag no repo. Pulando pra T-6. Retentarei no fim do ciclo."
+  echo "BLOQUEADA_DR T-4" >> ~/HairTech_org_log.txt
+  # NAO usa exit. Continua execucao.
+else
+  echo "T-4 APROVADA, T-5 pode rodar" >> ~/HairTech_org_log.txt
 fi
 ```
 
-**Dr. aprova respondendo SIM no chat com Codex/Cowork — ou criando flag.**
+**Dr. aprova respondendo SIM no chat com Codex/Cowork — ou criando flag no repo. Codex retenta T-4/T-5 no fim do ciclo.**
 
 ---
 
 ### T-5: Organizar HD Mac (estrutura humana + dedup) (~80min)
 
-SÓ executar se T-4 deu APROVADO.
+**SO executa se T-4 marcou APROVADA.** Senao pula.
+
+```bash
+if ! grep -q "T-4 APROVADA" ~/HairTech_org_log.txt; then
+  echo "T-5 PULADA: T-4 nao aprovada ainda" >> ~/HairTech_org_log.txt
+  # Pula pra T-6
+else
+  # Executa briefing organizar-mac.md
 
 Briefing completo: `codex-briefings/20260521-0145-organizar-mac.md` (já no repo)
 
@@ -139,13 +153,16 @@ Passos resumidos:
 1. Inventário READ-ONLY (sem mexer)
 2. Detectar duplicatas REAIS por shasum
 3. Telegram Dr. com resumo "vou mover X arquivos, deletar Y duplicatas"
-4. AGUARDAR SIM no Telegram (timeout 30min, senão para)
+4. AGUARDAR SIM no Telegram (timeout 30min, senão pula essa parte sem deletar — segue criando estrutura sem destruir)
 5. Criar estrutura `~/Documentos/HairTech/{01-PACIENTES,...,99-A-REVISAR}`
 6. `mv` (nunca cp) com verificação shasum origem==destino
 7. Duplicatas pra Trash (recuperável)
 8. Classificação Ollama pro 99-A-REVISAR
 9. Catalogar tudo em `~/Documentos/HairTech/_CATÁLOGO.md` + `_INDEX.json`
 10. Telegram resumo final
+
+fi  # fecha o else da T-4
+```
 
 ---
 
@@ -251,7 +268,35 @@ curl -s -X POST "https://api.telegram.org/bot8470054351:AAEBUfBP1oTT2Yx9W5J5_sgF
 
 ## SE FALHAR
 
-Qualquer tarefa que falhar: PARA TUDO, log em `~/HairTech_org_log.txt`, Telegram detalhe pro Dr. Nunca pular pra próxima se uma falhou (pode ser que a próxima dependa).
+**NUNCA PARAR.** Tarefa que falhar:
+- Marca `FALHOU` ou `BLOQUEADA_DR` no log
+- Telegram detalhe pro Dr.
+- **Pula pra proxima**
+- Retenta no fim do ciclo (apos T-11)
+- So para se: HD cheio >95%, crash sistema, OU Dr. mandar `STOP` no Telegram
+
+## LOOP DE RETRY (depois de T-11)
+
+```bash
+# Pega todas BLOQUEADA_DR / FALHOU do log e retenta
+while true; do
+  PENDENTES=$(grep -E "BLOQUEADA_DR|FALHOU" ~/HairTech_org_log.txt | sort -u)
+  [ -z "$PENDENTES" ] && break
+
+  for T in $(echo "$PENDENTES" | awk '{print $NF}' | sort -u); do
+    echo "Retry: $T"
+    # Re-executa logica da tarefa $T
+    # Se sucesso: remove a linha BLOQUEADA do log
+  done
+
+  # Check se Dr. mandou STOP no Telegram
+  STOP=$(curl -s "https://api.telegram.org/bot8470054351:AAEBUfBP1oTT2Yx9W5J5_sgFCfxoJeOeXEQ/getUpdates" \
+    | python3 -c 'import sys,json; print("STOP" if "STOP" in json.dumps(json.load(sys.stdin)).upper() else "GO")')
+  [ "$STOP" = "STOP" ] && { echo "Dr. mandou STOP, encerrando."; break; }
+
+  sleep 1800  # 30min entre retries
+done
+```
 
 ## SE TUDO DER CERTO
 
