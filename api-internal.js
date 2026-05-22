@@ -386,5 +386,81 @@ router.post("/lead/:numero/retomar", async (req, res) => {
   }
 });
 
+// Dump da caixa de entrada do AV — conversas com ULTIMA mensagem do cliente
+// (sem resposta do bot/humano ainda). Pra Claude/Codex/Manus auditarem o que
+// ficou "retido" sem precisar do painel /admin com login web.
+//
+// GET /api/internal/inbox-pendentes?limite=50
+//   Retorna ate N conversas onde a ultima msg eh do role='user' e nao houve
+//   resposta posterior. Ordenado pela ultima_mensagem desc.
+router.get("/inbox-pendentes", async (req, res) => {
+  const limite = Math.min(parseInt(req.query.limite || "50", 10), 200);
+  try {
+    const r = await pool.query(`
+      SELECT numero, nome, status, tipo, temperatura, historico, criado_em,
+             updated_at AS atualizado_em
+      FROM conversations
+      WHERE historico IS NOT NULL
+      ORDER BY updated_at DESC NULLS LAST
+      LIMIT $1
+    `, [limite * 3]);
+
+    const pendentes = [];
+    for (const row of r.rows) {
+      const h = row.historico;
+      if (!Array.isArray(h) || h.length === 0) continue;
+      const ultima = h[h.length - 1];
+      if (!ultima || ultima.role !== "user") continue;
+      pendentes.push({
+        numero: row.numero,
+        nome: row.nome,
+        status: row.status,
+        tipo: row.tipo,
+        temperatura: row.temperatura,
+        ultima_mensagem: {
+          role: ultima.role,
+          content: (ultima.content || "").slice(0, 1000),
+          ts: ultima.ts || null
+        },
+        total_mensagens: h.length,
+        criado_em: row.criado_em,
+        atualizado_em: row.atualizado_em,
+        link_admin: `https://hairtech.org/admin/conversa/${row.numero}`
+      });
+      if (pendentes.length >= limite) break;
+    }
+    res.json({
+      ok: true,
+      total: pendentes.length,
+      gerado_em: new Date().toISOString(),
+      conversas: pendentes
+    });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+// GET /api/internal/inbox-snapshot — versao compacta, mais conversas, sem historico
+router.get("/inbox-snapshot", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT numero, nome, status, tipo, temperatura, criado_em,
+             updated_at AS atualizado_em,
+             COALESCE(jsonb_array_length(historico), 0) AS msgs
+      FROM conversations
+      ORDER BY updated_at DESC NULLS LAST
+      LIMIT 500
+    `);
+    res.json({
+      ok: true,
+      total: r.rows.length,
+      gerado_em: new Date().toISOString(),
+      conversas: r.rows
+    });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
 module.exports = router;
 module.exports.setEnviarMensagem = setEnviarMensagem;

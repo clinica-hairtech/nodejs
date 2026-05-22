@@ -317,6 +317,23 @@ if [ -f /home/user/nodejs/.env ] && ! grep -q "^AGENTS_API_TOKEN=" /home/user/no
   echo "[T30] AGENTS_API_TOKEN gerado e gravado no .env"
 fi
 
+# T31: Instala cron do vigia-agentes.sh (30 em 30 min).
+VIGIA_SRC=/home/user/nodejs/scripts/cron/vigia-agentes.sh
+VIGIA_CRON=/etc/cron.d/hairtech-vigia
+if [ -f "$VIGIA_SRC" ]; then
+  chmod +x "$VIGIA_SRC"
+  if [ ! -f "$VIGIA_CRON" ] || ! grep -q "vigia-agentes.sh" "$VIGIA_CRON" 2>/dev/null; then
+    cat > "$VIGIA_CRON" <<EOF
+*/30 * * * * root $VIGIA_SRC >> /var/log/hairtech-vigia.log 2>&1
+EOF
+    chmod 644 "$VIGIA_CRON"
+    systemctl restart cron 2>/dev/null
+    echo "[T31] cron vigia-agentes instalado (30/30min)"
+  fi
+  touch /var/log/hairtech-vigia.log
+  chmod 640 /var/log/hairtech-vigia.log
+fi
+
 # T25: Escreve status.json pra /admin/status ler.
 STATUS_FILE=/home/user/nodejs/status.json
 {
