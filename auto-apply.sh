@@ -306,6 +306,17 @@ if [ -f /home/user/nodejs/.env ] && ! grep -q "^AGENDA_ICS_TOKEN=" /home/user/no
   echo "[T29] AGENDA_ICS_TOKEN gerado e gravado no .env"
 fi
 
+# T30: Gera AGENTS_API_TOKEN no .env se faltar (ponte multi-agente p/ ChatGPT/Manus/etc).
+if [ -f /home/user/nodejs/.env ] && ! grep -q "^AGENTS_API_TOKEN=" /home/user/nodejs/.env; then
+  NEW_AT=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | xxd -p)
+  echo "" >> /home/user/nodejs/.env
+  echo "# Ponte multi-agente: /api/agent/chat (ChatGPT Custom GPT, Manus, scripts)" >> /home/user/nodejs/.env
+  echo "AGENTS_API_TOKEN=$NEW_AT" >> /home/user/nodejs/.env
+  echo "AGENTS_API_LIMITE=10" >> /home/user/nodejs/.env
+  chmod 600 /home/user/nodejs/.env
+  echo "[T30] AGENTS_API_TOKEN gerado e gravado no .env"
+fi
+
 # T25: Escreve status.json pra /admin/status ler.
 STATUS_FILE=/home/user/nodejs/status.json
 {
